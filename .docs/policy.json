@@ -1,0 +1,51 @@
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "CreateAndManageRoles",
+			"Effect": "Allow",
+			"Action": [
+				"iam:CreateRole",
+				"iam:GetRole",
+				"iam:AttachRolePolicy",
+				"iam:PutRolePolicy",
+				"iam:TagRole"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "ManageRolesAnywhere",
+			"Effect": "Allow",
+			"Action": [
+				"rolesanywhere:CreateTrustAnchor",
+				"rolesanywhere:CreateProfile",
+				"rolesanywhere:GetTrustAnchor",
+				"rolesanywhere:ListTrustAnchors",
+				"rolesanywhere:TagResource"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowPassRole",
+			"Effect": "Allow",
+			"Action": "iam:PassRole",
+			"Resource": "*",
+			"Condition": {
+				"StringEquals": {
+					"iam:PassedToService": "rolesanywhere.amazonaws.com"
+				}
+			}
+		},
+		{
+			"Sid": "AllowRolesAnywhereServiceLinkedRole",
+			"Effect": "Allow",
+			"Action": "iam:CreateServiceLinkedRole",
+			"Resource": "arn:aws:iam::*:role/aws-service-role/rolesanywhere.amazonaws.com/AWSServiceRoleForRolesAnywhere",
+			"Condition": {
+				"StringEquals": {
+					"iam:AWSServiceName": "rolesanywhere.amazonaws.com"
+				}
+			}
+		}
+	]
+}
