@@ -1,8 +1,11 @@
 # Krypton.IAC.AWS.Hosting
 
-AWS Infrastructure-as-Code hosting platform using Terraform and IAM Roles Anywhere for keyless authentication.
+AWS Infrastructure-as-Code hosting platform using Terraform and IAM Roles Anywhere for keyless On-prem authentication and GHA STS OIDC provider for execution via Github actions pipelines.
 
 ---
+
+Self Hosted - pipeline setup 
+Note : Cost for AWS Trust anchor - $0.10 per 100 credential requests
 
 ## Bootstrap: Certificate, Trust Anchor, Role & Profile Setup
 
@@ -42,55 +45,65 @@ The user should have two policies attached:
 
 ```json
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "CreateAndManageRoles",
-            "Effect": "Allow",
-            "Action": [
-                "iam:CreateRole",
-                "iam:GetRole",
-                "iam:AttachRolePolicy",
-                "iam:PutRolePolicy",
-                "iam:TagRole"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "ManageRolesAnywhere",
-            "Effect": "Allow",
-            "Action": [
-                "rolesanywhere:CreateTrustAnchor",
-                "rolesanywhere:CreateProfile",
-                "rolesanywhere:GetTrustAnchor",
-                "rolesanywhere:ListTrustAnchors",
-                "rolesanywhere:TagResource"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "AllowPassRole",
-            "Effect": "Allow",
-            "Action": "iam:PassRole",
-            "Resource": "*",
-            "Condition": {
-                "StringEquals": {
-                    "iam:PassedToService": "rolesanywhere.amazonaws.com"
-                }
-            }
-        },
-        {
-            "Sid": "AllowRolesAnywhereServiceLinkedRole",
-            "Effect": "Allow",
-            "Action": "iam:CreateServiceLinkedRole",
-            "Resource": "arn:aws:iam::*:role/aws-service-role/rolesanywhere.amazonaws.com/AWSServiceRoleForRolesAnywhere",
-            "Condition": {
-                "StringEquals": {
-                    "iam:AWSServiceName": "rolesanywhere.amazonaws.com"
-                }
-            }
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CreateAndManageRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:AttachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:TagRole"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageRolesAnywhere",
+      "Effect": "Allow",
+      "Action": [
+        "rolesanywhere:CreateTrustAnchor",
+        "rolesanywhere:CreateProfile",
+        "rolesanywhere:GetTrustAnchor",
+        "rolesanywhere:ListTrustAnchors",
+        "rolesanywhere:TagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowPassRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "rolesanywhere.amazonaws.com"
         }
-    ]
+      }
+    },
+    {
+      "Sid": "AllowRolesAnywhereServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/rolesanywhere.amazonaws.com/AWSServiceRoleForRolesAnywhere",
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": "rolesanywhere.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "AllowOIDCProviderManagement",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateOpenIDConnectProvider",
+        "iam:GetOpenIDConnectProvider",
+        "iam:ListOpenIDConnectProviders"
+      ],
+      "Resource": "*"
+    }
+  ]
 }
 ```
 
@@ -122,32 +135,46 @@ Default values are set in `.auth/vars.sh` and can be overridden by environment v
 |---|---|---|
 | `CERT_CN` | `krypton-hosting-provider-trust-anchor` | Certificate common name |
 | `TA_NAME` | `krypton-hosting-platform-digiplac` | Trust anchor name in AWS |
-| `ROLE_NAME` | `krypton-hosting-tf-runner` | IAM role name |
+| `TA_ROLE_NAME` | `krypton-hosting-tfl-runner` | IAM role name (Roles Anywhere) |
+| `GHA_ROLE_NAME` | `krypton-hosting-gha-exec` | IAM role name (GitHub Actions) |
 | `KEY_TYPE` | `ec` | Key algorithm (`ec` or `rsa`) |
 | `EC_CURVE` | `prime256v1` | EC curve (P-256 or P-384) |
 | `CERT_DAYS` | `3650` | Certificate validity in days |
 
 ---
 
-## Step 3 — Create the Trust Anchor, Role & Profile
+## Step 3 — Create the Roles Anywhere Trust Anchor & GitHub Actions Role
 
-Run `create-role.sh` from the `.auth` directory. This single script performs all remaining AWS provisioning in sequence:
+This step is split into two sub-scripts orchestrated by a single entry point.
+
+### Architecture overview
+
+| Auth method | Script | AWS resources created |
+|---|---|---|
+| IAM Roles Anywhere (local Terraform) | `create-ta-role.sh` | Trust anchor, IAM role `krypton-hosting-tfl-runner`, Roles Anywhere profile |
+| GitHub Actions OIDC | `create-gha-role.sh` | IAM role `krypton-hosting-gha-exec`, OIDC provider `token.actions.githubusercontent.com` |
+
+Run the orchestrator from the `.auth` directory. It prompts for AWS credentials **once**, then calls each sub-script in turn:
 
 ```bash
 cd .auth
-./create-role.sh
+./setup.sh
 ```
 
-The script will:
-1. Locate and validate the CA certificate generated in Step 2
-2. Prompt for the bootstrap IAM user credentials
-3. Verify the credentials against `sts:GetCallerIdentity`
-4. Create the IAM Roles Anywhere **trust anchor** (`krypton-hosting-platform-digiplac`) backed by the certificate bundle
-5. Create the IAM **role** (`krypton-hosting-tf-runner`) using `role.json` as the assume-role policy document
-6. Attach the inline **permissions policy** from `admin-role.json` to the role
-7. Create the Roles Anywhere **profile** (`krypton-hosting-tf-runner-profile`) linked to the role
+`setup.sh` flow:
+1. Prompt for `admin_krypton` AWS credentials (written to a named CLI profile)
+2. Verify credentials via `sts:GetCallerIdentity`
+3. **Step 1 of 2** — run `create-ta-role.sh`
+4. **Step 2 of 2** — run `create-gha-role.sh`
 
-Each resource is checked for prior existence — if found, the script prompts to reuse it rather than erroring out, making re-runs safe.
+You can also run each sub-script independently if you only need to (re-)create one of the roles:
+
+```bash
+./create-ta-role.sh  --region us-east-1 --profile krypton
+./create-gha-role.sh --region us-east-1 --profile krypton
+```
+
+Each script checks whether its resources already exist and prompts to reuse them, making re-runs safe.
 
 ### Credential input
 
@@ -155,27 +182,106 @@ When prompted, enter the Access Key ID and Secret Access Key for the `admin_kryp
 
 ![](.docs/user_cerd_on_script_role_create.png)
 
-### Success output
+---
 
-On completion the script prints a summary of all created resources and the ARN values to copy into `terraform.tfvars`.
+### Step 3a — Trust Anchor Role (`create-ta-role.sh`)
 
-![](.docs/script_success.png)
+`create-ta-role.sh` performs:
+1. Locate and validate the CA certificate generated in Step 2 (checks `CA:TRUE`)
+2. Check for an existing trust anchor named `krypton-hosting-platform-digiplac` — prompt to reuse if found
+3. Upload the certificate bundle to create the IAM Roles Anywhere **trust anchor**
+4. Check for an existing IAM role `krypton-hosting-tfl-runner` — prompt to reuse if found
+5. Create the IAM **role** using `roles/role-ta.json` as the assume-role policy document
+6. Attach the inline **permissions policy** from `roles/admin-role.json`
+7. Check for an existing Roles Anywhere profile — prompt to reuse if found
+8. Create the Roles Anywhere **profile** (`krypton-hosting-tfl-runner-profile`) linked to the role
+
+On completion the script prints a summary including Terraform variable hints:
+
+![](.docs/ta_success.png)
 
 The output confirms:
-- **Trust Anchor Name / ARN** — the Roles Anywhere trust anchor backed by the self-signed certificate
-- **Role Name / ARN** — the IAM role the Terraform runner will assume (`krypton-hosting-tf-runner`)
-- **Profile Name / ARN** — the Roles Anywhere profile (`krypton-hosting-tf-runner-profile`) that scopes the role
+- **Trust Anchor Name / ARN** — Roles Anywhere trust anchor backed by the self-signed certificate
+- **Role Name / ARN** — IAM role the Terraform runner will assume (`krypton-hosting-tfl-runner`)
+- **Profile Name / ARN** — Roles Anywhere profile (`krypton-hosting-tfl-runner-profile`)
 - **Terraform variable hints** — `trust_anchor_arn`, `role_arn`, and `rolesanywhere_profile_arn` ready to paste
+
+---
+
+### Step 3b — GitHub Actions Role (`create-gha-role.sh`)
+
+`create-gha-role.sh` performs:
+1. Check for an existing IAM role `krypton-hosting-gha-exec` — prompt to reuse if found
+2. Create the IAM **role** using `roles/role-gha-sts.json` as the assume-role policy document
+3. Register the GitHub OIDC provider (`token.actions.githubusercontent.com`) — idempotent, skipped if already present
+4. Attach the inline **permissions policy** from `roles/admin-role.json`
+
+#### Trust policy (`roles/role-gha-sts.json`)
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GitHubActionsOIDC",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": [
+            "repo:VinaSundar-Nat/Krypton.IAC.AWS.Hosting:ref:refs/heads/main"
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+> **Note:** `StringEquals` on `:sub` pins the role to the exact repository and branch. Update the value in `roles/role-gha-sts.json` if the source repo or branch changes.
+
+#### GitHub Actions workflow usage
+
+Add the following permissions and `configure-aws-credentials` step to any workflow job that needs AWS access:
+
+```yaml
+permissions:
+  id-token: write   # Required for OIDC token request
+  contents: read
+
+steps:
+  - name: Configure AWS credentials
+    uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/krypton-hosting-gha-exec
+      aws-region: us-east-1
+```
+
+The `role-to-assume` ARN and `aws-region` values are printed at the end of `create-gha-role.sh`.
+
+On completion the script prints a summary:
+
+![](.docs/gha_success.png)
 
 ---
 
 ## Verify in the AWS Console
 
-### IAM Role
+### IAM Role — Roles Anywhere (`krypton-hosting-tfl-runner`)
 
-Navigate to **IAM → Roles → krypton-hosting-tf-runner**. Confirm the role exists with the `krypton-hosting-tf-runner-admin-policy` inline policy attached.
+Navigate to **IAM → Roles → krypton-hosting-tfl-runner**. Confirm the role exists with the `krypton-hosting-tfl-runner-admin-policy` inline policy attached.
 
-![](.docs/role_on_console.png)
+![](.docs/ta_role_on_console.png)
+
+### IAM Role — GitHub Actions (`krypton-hosting-gha-exec`)
+
+Navigate to **IAM → Roles → krypton-hosting-gha-exec**. Confirm the role exists with the `krypton-hosting-gha-exec-admin-policy` inline policy attached and the trust relationship shows `token.actions.githubusercontent.com` as the federated principal.
+
+![](.docs/gha_role_on_console.png)
 
 ### Trust Anchor & Profile
 
@@ -195,4 +301,6 @@ Click into the trust anchor `krypton-hosting-platform-digiplac` and expand **Sou
 
 - Replace the self-signed certificate with one issued by your CA provider before production use
 - Deactivate or delete the `admin_krypton` bootstrap access keys after setup
-- Add the output ARNs to the appropriate `config/<env>/terraform.tfvars` files
+- Add the Roles Anywhere ARNs to the appropriate `terraform.tfvars` files (`trust_anchor_arn`, `role_arn`, `rolesanywhere_profile_arn`)
+- Update `roles/role-gha-sts.json` with the real account ID and add it to your GitHub Actions workflow (`role-to-assume`)
+- Scope down `roles/admin-role.json` to only the Terraform actions required by your deployment
