@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# upload-cert.sh
-# Interactively logs in to the AWS CLI, verifies the trust-anchor certificate
-# exists locally, then creates an IAM Roles Anywhere Trust Anchor.
-#
-# The resulting Trust Anchor ARN is printed and can be referenced in Terraform
-# via the aws_rolesanywhere_trust_anchor data source or resource.
+# create-ta-role.sh
+# Creates the IAM Roles Anywhere trust anchor, IAM role, and profile
+# for local Terraform execution via X.509 certificate authentication.
 #
 # Usage:
-#   ./upload-cert.sh [--region <region>] [--profile <profile>]
+#   ./create-ta-role.sh [--region <region>] [--profile <profile>]
 #
 # Requirements: aws-cli >= 2, openssl
 # -----------------------------------------------------------------------------
@@ -25,8 +22,8 @@ AWS_PROFILE="${AWS_PROFILE:-default}"
 # ── Argument parsing ──────────────────────────────────────────────────────────
 usage() {
   echo "Usage: $0 [options]"
-  echo "  --region   <region>   AWS region              (default: ${AWS_REGION})"
-  echo "  --profile  <name>     AWS CLI profile          (default: ${AWS_PROFILE})"
+  echo "  --region   <region>   AWS region   (default: ${AWS_REGION})"
+  echo "  --profile  <name>     AWS profile  (default: ${AWS_PROFILE})"
   exit 1
 }
 
@@ -39,19 +36,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# ── Prerequisite checks ───────────────────────────────────────────────────────
-for cmd in aws openssl; do
-  if ! command -v "$cmd" &>/dev/null; then
-    echo "ERROR: '$cmd' is not installed or not in PATH." >&2
-    exit 1
-  fi
-done
-
-# ── Derive expected certificate path (same safe-name logic as create-cert.sh) ─
+# ── Derive expected certificate path ─────────────────────────────────────────
 SAFE_CN="$(echo "$CERT_CN" | tr -- '- ' '_')"
 CERT_FILE="${SCRIPT_DIR}/${OUT_DIR}/${SAFE_CN}.cert.pem"
 
-# Strip leading ./ from OUT_DIR for the resolved path when OUT_DIR is relative
 if [[ "$OUT_DIR" = ./* || "$OUT_DIR" = "." ]]; then
   CERT_FILE="${SCRIPT_DIR}/$(echo "$OUT_DIR" | sed 's|^\./||')/${SAFE_CN}.cert.pem"
 fi
@@ -64,81 +52,19 @@ if [[ ! -f "$CERT_FILE" ]]; then
   exit 1
 fi
 
-# Sanity-check the cert is a CA cert (basicConstraints CA:TRUE)
 if ! openssl x509 -in "$CERT_FILE" -noout -text 2>/dev/null | grep -q "CA:TRUE"; then
   echo "ERROR: ${CERT_FILE} does not appear to be a CA certificate (CA:TRUE missing)." >&2
   exit 1
 fi
 echo "Certificate found and verified as CA cert."
 
-# ── Interactive AWS login ─────────────────────────────────────────────────────
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " AWS CLI Login"
-echo " Profile : ${AWS_PROFILE}"
-echo " Region  : ${AWS_REGION}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "Enter your AWS credentials (input is hidden for secret key):"
-echo ""
-
-read -r -p "  AWS Access Key ID     : " INPUT_KEY_ID
-if [[ -z "$INPUT_KEY_ID" ]]; then
-  echo "Access Key ID cannot be empty. Using default ${AWS_KEY_ID}" >&2
-  INPUT_KEY_ID="${AWS_KEY_ID}"
-fi
-
-read -r -s -p "  AWS Secret Access Key : " INPUT_SECRET_KEY
-echo ""
-if [[ -z "$INPUT_SECRET_KEY" ]]; then
-  echo "ERROR: Secret Access Key cannot be empty." >&2
-  exit 1
-fi
-
-read -r -p "  Session Token (leave blank if not using STS/SSO): " INPUT_SESSION_TOKEN
-echo ""
-
-# Write credentials into the named profile
-aws configure set aws_access_key_id     "$INPUT_KEY_ID"     --profile "$AWS_PROFILE"
-aws configure set aws_secret_access_key "$INPUT_SECRET_KEY" --profile "$AWS_PROFILE"
-aws configure set region                "$AWS_REGION"       --profile "$AWS_PROFILE"
-aws configure set output                "json"              --profile "$AWS_PROFILE"
-
-if [[ -n "$INPUT_SESSION_TOKEN" ]]; then
-  aws configure set aws_session_token "$INPUT_SESSION_TOKEN" --profile "$AWS_PROFILE"
-fi
-
-# Erase credential variables from memory immediately after storing
-INPUT_KEY_ID=""
-INPUT_SECRET_KEY=""
-INPUT_SESSION_TOKEN=""
-
-# ── Verify the credentials ────────────────────────────────────────────────────
-echo "Verifying credentials..."
-IDENTITY="$(aws sts get-caller-identity --profile "$AWS_PROFILE" --region "$AWS_REGION" --output json 2>&1)" || {
-  echo ""
-  echo "ERROR: AWS credential verification failed." >&2
-  echo "$IDENTITY" >&2
-  exit 1
-}
-
-ACCOUNT_ID="$(echo "$IDENTITY" | grep '"Account"' | sed 's/.*: *"\([^"]*\)".*/\1/')"
-CALLER_ARN="$(echo "$IDENTITY"  | grep '"Arn"'     | sed 's/.*: *"\([^"]*\)".*/\1/')"
-
-echo ""
-echo "  Logged in as : ${CALLER_ARN}"
-echo "  Account      : ${ACCOUNT_ID}"
-echo ""
-
 # ── Check if trust anchor already exists ─────────────────────────────────────
 echo "Checking for existing trust anchor '${TA_NAME}'..."
-EXISTING_ARN=""
 ANCHORS="$(aws rolesanywhere list-trust-anchors \
   --profile "$AWS_PROFILE" \
   --region  "$AWS_REGION"  \
   --output  json 2>/dev/null || echo '{"trustAnchors":[]}')"
 
-# Extract ARN if a trust anchor with the same name exists
 EXISTING_ARN="$(echo "$ANCHORS" \
   | grep -A 5 "\"name\": *\"${TA_NAME}\"" \
   | grep '"trustAnchorArn"' \
@@ -159,10 +85,8 @@ if [[ -n "$EXISTING_ARN" ]]; then
     exit 1
   fi
 else
-  # ── Create the trust anchor ─────────────────────────────────────────────────
   echo "Creating IAM Roles Anywhere trust anchor '${TA_NAME}'..."
-  echo "Uploading certificate and creating trust anchor... (this may take a moment)"
-  echo "${CERT_FILE}"
+  echo "Uploading certificate... (this may take a moment)"
   RESPONSE="$(aws rolesanywhere create-trust-anchor \
     --name    "$TA_NAME" \
     --source  "{\"sourceType\":\"CERTIFICATE_BUNDLE\",\"sourceData\":{\"x509CertificateData\":\"$(awk '{printf "%s\\n", $0}' "$CERT_FILE")\"}}" \
@@ -174,10 +98,12 @@ else
   TRUST_ANCHOR_ARN="$(echo "$RESPONSE" \
     | grep '"trustAnchorArn"' \
     | sed 's/.*: *"\([^"]*\)".*/\1/')"
+  echo "Trust anchor created."
 fi
 
 # ── Create IAM role ───────────────────────────────────────────────────────────
-POLICY_FILE="${SCRIPT_DIR}/role.json"
+POLICY_FILE="${SCRIPT_DIR}/roles/role-ta.json"
+ROLE_NAME="${TA_ROLE_NAME}"
 ROLESANYWHERE_PROFILE_NAME="${ROLE_NAME}-profile"
 
 if [[ ! -f "$POLICY_FILE" ]]; then
@@ -220,21 +146,26 @@ else
     | grep '"Arn"' \
     | sed 's/.*: *"\([^"]*\)".*/\1/' \
     | head -1)"
-  echo "IAM role created."
+
+  if [[ -z "$ROLE_ARN" ]]; then
+    echo "ERROR: Failed to extract Role ARN from response." >&2
+    exit 1
+  fi
+  echo "IAM role '${ROLE_NAME}' created."
 fi
 
 # ── Attach inline permissions policy ─────────────────────────────────────────
-PERMS_FILE="${SCRIPT_DIR}/admin-role.json"
+PERMS_FILE="${SCRIPT_DIR}/roles/admin-role.json"
 if [[ ! -f "$PERMS_FILE" ]]; then
   echo "ERROR: Permissions policy not found: ${PERMS_FILE}" >&2
   exit 1
 fi
-echo "Attaching inline policy from admin-role.json to '${ROLE_NAME}'..."
+echo "Attaching inline policy to '${ROLE_NAME}'..."
 aws iam put-role-policy \
-  --role-name     "$ROLE_NAME" \
-  --policy-name   "${ROLE_NAME}-admin-policy" \
+  --role-name       "$ROLE_NAME" \
+  --policy-name     "${ROLE_NAME}-admin-policy" \
   --policy-document "file://${PERMS_FILE}" \
-  --profile       "$AWS_PROFILE"
+  --profile         "$AWS_PROFILE"
 echo "Inline policy attached."
 
 # ── Create IAM Roles Anywhere profile ────────────────────────────────────────
@@ -281,7 +212,7 @@ else
   echo "Roles Anywhere profile created."
 fi
 
-# ── Output ────────────────────────────────────────────────────────────────────
+# ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo " Trust Anchor, Role, and Profile created successfully"
@@ -294,7 +225,6 @@ echo "  Role ARN          : ${ROLE_ARN}"
 echo "  Profile Name      : ${ROLESANYWHERE_PROFILE_NAME}"
 echo "  Profile ARN       : ${PROFILE_ARN}"
 echo "  Region            : ${AWS_REGION}"
-echo "  Account           : ${ACCOUNT_ID}"
 echo ""
 echo "Add to your Terraform variables (e.g. terraform.tfvars):"
 echo ""
