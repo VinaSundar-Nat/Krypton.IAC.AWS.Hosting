@@ -1,0 +1,17 @@
+organisation: 
+    name: "krypton"
+    program: 
+      - name: "carevo"
+        sid: "kr-carevo"
+        environments:
+          - name: "dev"
+          - name: "prod"
+          - name: "staging"
+        admins:
+          - name: "vina sundar"
+            email: "vinasundar.kr@hotmail.com"
+        tags:
+          environment: "dev"
+          program: "carevo"
+          organisation: "krypton"
+                

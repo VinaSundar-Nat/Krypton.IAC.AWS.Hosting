@@ -1,0 +1,9 @@
+platform:
+  program: "carevo"
+  name: "hosting"
+  description: "Hosting platform for applications" 
+  components:
+    group: 
+      - name: "network"
+        type: "vpc"
+        

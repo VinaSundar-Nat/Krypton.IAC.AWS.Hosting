@@ -1,0 +1,34 @@
+component:
+  - sid: "kr-carevo"
+    # define VPC configurations
+    vpc: 
+        name: "kr-carevo-dev-vpc"
+        cidr: "10.10.0.0/16"
+        availability_zones:
+          - "us-east-1a"    
+    # define public / private subnet configurations
+    subnets:
+        - name: "kr-carevo-dev-public-subnet"
+          cidr: "10.10.1.0/24"
+          type: "public"
+          availability_zone: "us-east-1a"
+        - name: "kr-carevo-dev-private-subnet"
+          cidr: "10.10.2.0/24"
+          type: "private"
+          availability_zone: "us-east-1a"
+    dchp_options:
+        enabled: false
+        domain_name: "ecnt.dev.carevo.krypton.internal"
+        domain_name_servers: "AmazonProvidedDNS"
+    nat_gateway:
+        name: "kr-carevo-dev-nat-gateway"
+        enabled: true
+        single: true  # true = one NAT for all AZs (dev cost-saving)
+    internet_gateway:
+        name: "kr-carevo-dev-internet-gateway"
+        enabled: true
+    route_tables:
+        - name: "kr-carevo-dev-public-rt"
+          routes:
+            - destination: "0.0.0.0/0"
+

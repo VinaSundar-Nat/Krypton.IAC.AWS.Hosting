@@ -1,0 +1,6 @@
+# cache zone — internal-count (private subnets, NAT egress only)
+zone:
+  name: cache
+  label: icnt       # internal-count
+  cidr: "10.10.30.0/24"
+  public: false
