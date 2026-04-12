@@ -1,0 +1,41 @@
+# =============================================================================
+# Composite action: Fetch GitHub OIDC token
+#
+# Requests a short-lived OIDC token from the GitHub Actions token endpoint and
+# writes it to /tmp/web-identity-token.  The Terraform AWS provider exchanges
+# it for STS credentials via assume_role_with_web_identity (auth_mode=gha).
+#
+# The token value is immediately masked in the runner logs.
+#
+# Required caller permissions:
+#   permissions:
+#     id-token: write
+#
+# Usage:
+#   - name: Fetch GitHub OIDC token
+#     uses: ./.github/authorize
+# =============================================================================
+
+name: Fetch GitHub OIDC Token
+description: >
+  Requests a short-lived OIDC token from the GitHub Actions token endpoint
+  and writes it to /tmp/web-identity-token for use by the Terraform AWS
+  provider (assume_role_with_web_identity, auth_mode=gha).
+
+outputs:
+  token-path:
+    description: 'Absolute path to the written OIDC token file.'
+    value: /tmp/web-identity-token
+
+runs:
+  using: composite
+  steps:
+    - name: Request and write OIDC token
+      shell: bash
+      run: |
+        TOKEN=$(curl -fsSL \
+          -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" \
+          | jq -r '.value')
+        printf '%s' "${TOKEN}" > /tmp/web-identity-token
+        echo "::add-mask::${TOKEN}"

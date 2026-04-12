@@ -1,0 +1,6 @@
+# app zone — restricted (private subnets, NAT egress only)
+zone:
+  name: app
+  label: rst        # restricted
+  cidr: "10.10.10.0/24"
+  public: false

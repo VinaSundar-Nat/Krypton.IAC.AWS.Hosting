@@ -1,0 +1,213 @@
+# =============================================================================
+# Hosting Plan & Deploy
+#
+# Triggered manually (workflow_dispatch).
+# Inputs  : program (SID, e.g. kr-carevo) and environment (dev|stage|prod).
+#
+# Jobs
+# ────
+#  plan   – Steps 1-4: checkout → replace vars → AWS OIDC auth → tf plan
+#           Uploads the plan binary as a GHA artifact (retention: 1 day).
+#
+#  deploy – Step 5: human approval gate via GitHub environment protection rule.
+#           The job blocks for up to 3 hours; if no approval arrives the
+#           workflow times out and the artifact is left unused.
+#           Step 6: terraform apply against the downloaded artifact, then
+#           deletes the artifact immediately post-deployment.
+#
+# Prerequisites (one-time setup in repo Settings)
+# ───────────────────────────────────────────────
+#  Secrets  : GHA_ROLE_ARN  – ARN of the krypton-hosting-gha-exec IAM role
+#                             (output by .auth/create-gha-role.sh)
+#  Environments : dev-approval / stage-approval / prod-approval
+#                 Each must have at least one Required Reviewer (repo owner).
+# =============================================================================
+
+name: Hosting Plan & Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      program:
+        description: 'Program SID (e.g. kr-carevo)'
+        required: true
+        default: 'kr-carevo'
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+
+jobs:
+
+  # ============================================================================
+  # PLAN JOB  (Steps 1 – 4)
+  # ============================================================================
+  plan:
+    name: 'Plan · ${{ inputs.environment }} / ${{ inputs.program }}'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for GitHub OIDC token issuance
+      contents: read
+
+    steps:
+      # ── Step 1: Checkout ────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Step 2: Replace variable templates ──────────────────────────────────
+      - name: Replace variable templates
+        run: |
+          chmod +x scripts/install-deps.sh scripts/replace-vars.sh
+          scripts/install-deps.sh
+          scripts/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
+
+      # ── Step 3: AWS authentication via GitHub STS OIDC ──────────────────────
+      - name: Fetch GitHub OIDC token
+        uses: ./.github/authorize
+
+      # ── Step 4: Terraform plan ───────────────────────────────────────────────
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.8"
+
+      - name: Terraform init
+        working-directory: core
+        run: terraform init
+        env:
+          TF_VAR_auth_mode: "gha"
+          TF_VAR_gha_role_arn: ${{ secrets.GHA_ROLE_ARN }}
+          TF_VAR_web_identity_token_file: "/tmp/web-identity-token"
+
+      - name: Terraform plan
+        id: plan
+        working-directory: core
+        run: |
+          PLAN_FILE="${RUNNER_TEMP}/kr_ops_${{ inputs.environment }}_$(date -u +%Y%m%d_%H%M%S).tfplan"
+          echo "PLAN_FILE=${PLAN_FILE}" >> "${GITHUB_ENV}"
+          terraform plan \
+            -var-file=variables/network.auto.tfvars \
+            -var-file=variables/security.auto.tfvars \
+            -out="${PLAN_FILE}" \
+            -lock=false \
+            -detailed-exitcode || PLAN_EXIT=$?
+          # Exit codes: 0 = no changes, 1 = error, 2 = changes present (expected)
+          if [[ "${PLAN_EXIT:-0}" -eq 1 ]]; then
+            echo "Terraform plan returned an error." >&2
+            exit 1
+          fi
+        env:
+          TF_VAR_auth_mode: "gha"
+          TF_VAR_gha_role_arn: ${{ secrets.GHA_ROLE_ARN }}
+          TF_VAR_web_identity_token_file: "/tmp/web-identity-token"
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # Artifact name encodes environment + run ID so the deploy job
+          # retrieves exactly this plan and not one from a concurrent run.
+          name: tfplan-${{ inputs.environment }}-${{ github.run_id }}
+          path: ${{ env.PLAN_FILE }}
+          if-no-files-found: error
+          # GitHub's minimum artifact retention is 1 day.  The deploy job is
+          # gated with a 3-hour approval window (timeout-minutes: 180); if
+          # approval is not received the workflow fails and the artifact
+          # is never applied.
+          retention-days: 1
+
+  # ============================================================================
+  # DEPLOY JOB  (Step 5 approval + Step 6 apply)
+  # ============================================================================
+  deploy:
+    name: 'Deploy · ${{ inputs.environment }} / ${{ inputs.program }}'
+    needs: plan
+    runs-on: ubuntu-latest
+    # ── Step 5: Human approval ─────────────────────────────────────────────────
+    # GitHub blocks this job until a Required Reviewer on the '<env>-approval'
+    # environment approves it in the Actions UI.
+    # Configure via: Settings → Environments → <env>-approval → Required reviewers
+    environment: ${{ inputs.environment }}-approval
+    timeout-minutes: 60   # auto-fail if not approved within 1 hour
+    permissions:
+      id-token: write   # required for GitHub OIDC token issuance
+      contents: read
+      actions: write    # required to delete the plan artifact post-deploy
+
+    steps:
+      # Each job runs on a fresh runner; re-run checkout and var replacement
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Replace variable templates
+        run: |
+          chmod +x scripts/install-deps.sh scripts/replace-vars.sh
+          scripts/install-deps.sh
+          scripts/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
+
+      # OIDC tokens are short-lived and not shared between jobs; re-fetch here
+      - name: Fetch GitHub OIDC token
+        uses: ./.github/authorize
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.8"
+
+      - name: Terraform init
+        working-directory: core
+        run: terraform init
+        env:
+          TF_VAR_auth_mode: "gha"
+          TF_VAR_gha_role_arn: ${{ secrets.GHA_ROLE_ARN }}
+          TF_VAR_web_identity_token_file: "/tmp/web-identity-token"
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/plan
+
+      # ── Step 6: Terraform apply ──────────────────────────────────────────────
+      - name: Terraform apply
+        working-directory: core
+        run: |
+          PLAN_FILE=$(find "${RUNNER_TEMP}/plan" -name "*.tfplan" | head -1)
+          if [[ -z "${PLAN_FILE}" ]]; then
+            echo "ERROR: No plan file found in downloaded artifact." >&2
+            exit 1
+          fi
+          terraform apply -auto-approve "${PLAN_FILE}"
+        env:
+          TF_VAR_auth_mode: "gha"
+          TF_VAR_gha_role_arn: ${{ secrets.GHA_ROLE_ARN }}
+          TF_VAR_web_identity_token_file: "/tmp/web-identity-token"
+
+      # ── Step 6 (cleanup): Delete plan artifact immediately post-deployment ───
+      # Runs on success OR failure so the artifact is never left dangling.
+      - name: Delete plan artifact
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifactName = `tfplan-${{ inputs.environment }}-${{ github.run_id }}`;
+            const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner:  context.repo.owner,
+              repo:   context.repo.repo,
+              run_id: context.runId,
+            });
+            const artifact = data.artifacts.find(a => a.name === artifactName);
+            if (artifact) {
+              await github.rest.actions.deleteArtifact({
+                owner:       context.repo.owner,
+                repo:        context.repo.repo,
+                artifact_id: artifact.id,
+              });
+              core.info(`Deleted artifact: ${artifactName} (id=${artifact.id})`);
+            } else {
+              core.warning(`Artifact not found: ${artifactName}`);
+            }

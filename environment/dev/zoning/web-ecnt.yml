@@ -1,0 +1,6 @@
+# web zone — external-facing (public subnets, IGW route)
+zone:
+  name: web
+  label: ecnt       # external-count
+  cidr: "10.10.0.0/24"
+  public: true
