@@ -1,14 +1,18 @@
 # =============================================================================
-# terraform.tfvars
+# core/terraform.tfvars — MASTER TEMPLATE
 #
-# Fill in the ARNs after running .auth/setup.sh.
-# ARNs are printed at the end of each setup script and are not secret.
+# REPLACE_* tokens are substituted by scripts/replace-vars.sh at runtime.
+# Restored to this state by scripts/revert-master-vars.sh after terraform runs.
 #
-# Do NOT set auth_mode here — export TF_VAR_auth_mode=gha|local at the shell
-# so the same tfvars file works for both execution contexts.
+# Source:
+#   environment/org.yml  → organisation, program, environment tags
+#
+# DO NOT edit REPLACE_* tokens — edit environment/org.yml instead.
+# DO NOT set auth_mode here — export TF_VAR_auth_mode=gha|local at the shell.
 # =============================================================================
 
 aws_region = "us-east-1"
+auth_mode = "local" # or "gha"
 
 # ── GitHub Actions OIDC ───────────────────────────────────────────────────────
 # Role created by .auth/create-gha-role.sh

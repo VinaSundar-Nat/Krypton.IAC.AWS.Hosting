@@ -18,12 +18,13 @@
 #   - .auth/setup.sh has been run and ARNs are set in scripts/vars.sh
 #
 # Usage:
-#   ./scripts/runner.sh [ENV] [COMMAND] [FLAGS]
-#   ./scripts/runner.sh dev plan            — plan only, saves .tfplan file
-#   ./scripts/runner.sh dev apply           — plan → apply (two-phase)
-#   ./scripts/runner.sh dev destroy         — plan -destroy → apply
-#   ./scripts/runner.sh prod apply -var="vpc_cidr=10.20.0.0/16"
-#   ENV defaults to 'dev', COMMAND defaults to 'plan'.
+#   ./scripts/runner.sh [ENV] [COMMAND] [PROGRAM] [FLAGS]
+#   ./scripts/runner.sh dev plan                    — plan only, saves .tfplan file
+#   ./scripts/runner.sh dev apply                   — plan → apply (two-phase)
+#   ./scripts/runner.sh dev destroy                 — plan -destroy → apply
+#   ./scripts/runner.sh dev apply kr-carevo
+#   ./scripts/runner.sh prod apply kr-carevo -var="vpc_cidr=10.20.0.0/16"
+#   ENV defaults to 'dev', COMMAND defaults to 'plan', PROGRAM defaults to 'kr-carevo'.
 # =============================================================================
 set -euo pipefail
 
@@ -36,8 +37,9 @@ AUTH_DIR="${REPO_ROOT}/.auth"
 source "${SCRIPT_DIR}/vars.sh"
 
 SAFE_CN="$(echo "${CERT_CN}" | tr -- '- ' '_')"
-CERT_FILE="${AUTH_DIR}/cert/${SAFE_CN}.cert.pem"
-KEY_FILE="${AUTH_DIR}/cert/${SAFE_CN}.key.pem"
+SAFE_ROLE="$(echo "${TA_ROLE_NAME}" | tr -- '- ' '_')"
+CERT_FILE="${AUTH_DIR}/cert/${SAFE_ROLE}.cert.pem"
+KEY_FILE="${AUTH_DIR}/cert/${SAFE_ROLE}.key.pem"
 
 # ── Validate prerequisites ────────────────────────────────────────────────────
 if ! command -v aws_signing_helper &>/dev/null; then
@@ -110,10 +112,17 @@ echo "AWS profile '${AWS_PROFILE_NAME}' written to ~/.aws/config"
 # ── Run Terraform ─────────────────────────────────────────────────────────────
 ENV="${1:-dev}"
 TF_COMMAND="${2:-plan}"
-shift 2 || true
+PROGRAM="${3:-kr-carevo}"
+shift 3 || true
+
+# ── Ensure all scripts are executable ───────────────────────────────────────
+chmod u+x "${SCRIPT_DIR}"/*.sh
+
+# ── Install required tools (yq, etc.) ────────────────────────────────────────
+"${SCRIPT_DIR}/install-deps.sh"
 
 # ── Generate var files from environment YAML ────────────────────────────────────
-"${SCRIPT_DIR}/replace-vars.sh" "${ENV}"
+"${SCRIPT_DIR}/replace-vars.sh" "${PROGRAM}" "${ENV}"
 
 # ── Plan file name (timestamp-stamped, cleaned up on exit) ──────────────────
 LOCALDT="$(date +%Y%m%d_%H%M%S)"
@@ -156,6 +165,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo " terraform plan ${PLAN_FLAGS[*]} $*"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 set +e
+echo "Running terraform plan with flags: ${PLAN_FLAGS[*]} $*"
 terraform plan "${PLAN_FLAGS[@]}" "$@"
 PLAN_EXIT=$?
 set -e

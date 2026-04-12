@@ -197,3 +197,9 @@ copilot-instructions.*
 # settings.json
 # .env.local
 # .env.production
+
+.terraform
+core/network.tf
+core/security.tf
+core/.terraform.lock.hcl
+core/terraform.tfstate

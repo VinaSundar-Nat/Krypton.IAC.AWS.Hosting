@@ -11,8 +11,10 @@
 # DO NOT edit REPLACE_* tokens — edit the source YAML files instead.
 # =============================================================================
 
-vpc_name = "REPLACE_VPC_NAME"
-vpc_cidr = "REPLACE_VPC_CIDR"
+vpc_name       = "REPLACE_VPC_NAME"
+vpc_cidr       = "REPLACE_VPC_CIDR"
+vpc_enable_dns = REPLACE_VPC_ENABLE_DNS
+vpc_tags       = REPLACE_VPC_TAGS
 
 availability_zones = REPLACE_AVAILABILITY_ZONES
 

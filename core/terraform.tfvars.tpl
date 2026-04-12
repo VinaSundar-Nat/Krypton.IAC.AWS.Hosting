@@ -12,6 +12,7 @@
 # =============================================================================
 
 aws_region = "us-east-1"
+auth_mode = "local" # or "gha"
 
 # ── GitHub Actions OIDC ───────────────────────────────────────────────────────
 # Role created by .auth/create-gha-role.sh

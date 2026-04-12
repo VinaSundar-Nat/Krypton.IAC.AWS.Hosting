@@ -1,11 +1,13 @@
 component:
   - sid: "kr-carevo"
     # define VPC configurations
-    vpc: 
-        name: "kr-carevo-dev-vpc"
+    vpc:         
         cidr: "10.10.0.0/16"
         availability_zones:
-          - "us-east-1a"    
+          - "us-east-1a"
+        enabledns: true
+        tags:
+          name: "kr-carevo-dev-vpc"    
     # define public / private subnet configurations
     subnets:
         - name: "kr-carevo-dev-public-subnet"

@@ -297,6 +297,213 @@ Click into the trust anchor `krypton-hosting-platform-digiplac` and expand **Sou
 
 ---
 
+## Environment Configuration
+
+The project uses a hierarchical configuration model to define AWS infrastructure per environment.
+
+### `environment/org.yml`
+
+Defines your organization structure—program name, SIDs, and environment list. Upon first setup, configure:
+
+- `organisation.name` — your organization identifier (e.g., `krypton`)
+- `program[].name` — program/product name (e.g., `carevo`)
+- `program[].sid` — service identifier in format `kr-<program>` (e.g., `kr-carevo`)
+- `program[].environments[]` — list of deployment environments (`dev`, `staging`, `prod`)
+- `program[].admins[]` — team members with email addresses and contact details
+- `program[].tags` — common AWS tags applied to all resources for cost allocation and resource tracking
+
+**Example:**
+
+```yaml
+organisation: 
+  name: "krypton"
+  program: 
+    - name: "carevo"
+      sid: "kr-carevo"
+      environments:
+        - name: "dev"
+        - name: "prod"
+        - name: "staging"
+      admins:
+        - name: "your name"
+          email: "your.email@example.com"
+      tags:
+        environment: "dev"
+        program: "carevo"
+        organisation: "krypton"
+```
+
+### `environment/<ENV>/security/network.yaml`
+
+Defines VPC topology, subnetting, and networking for a specific environment. Each component is identified by its `sid` (matching the value in `org.yml`). Configure:
+
+- **VPC** — CIDR block, availability zones, DNS enablement, and tags
+- **Subnets** — public/private subnets with CIDR ranges and availability zone placement
+- **DHCP Options** — custom domain name and DNS servers (typically `AmazonProvidedDNS` for AWS-managed DNS)
+- **NAT Gateway** — enable for private subnet internet egress; set `single: true` for dev environments to minimize costs (single NAT shared by all AZs)
+- **Internet Gateway** — enable for public-facing resources
+- **Route Tables** — destination routes and associated targets (IGW, NAT, VPC peering)
+
+**Example structure for `environment/dev/security/network.yaml`:**
+
+```yaml
+component:
+  - sid: "kr-carevo"
+    vpc:
+      cidr: "10.10.0.0/16"
+      availability_zones:
+        - "us-east-1a"
+        - "us-east-1b"
+      enabledns: true
+      tags:
+        name: "kr-carevo-dev-vpc"
+    subnets:
+      - name: "kr-carevo-dev-public-subnet"
+        cidr: "10.10.1.0/24"
+        type: "public"
+        availability_zone: "us-east-1a"
+      - name: "kr-carevo-dev-private-subnet"
+        cidr: "10.10.2.0/24"
+        type: "private"
+        availability_zone: "us-east-1a"
+    dchp_options:
+      enabled: false
+      domain_name: "dev.carevo.krypton.internal"
+      domain_name_servers: "AmazonProvidedDNS"
+    nat_gateway:
+      name: "kr-carevo-dev-nat-gateway"
+      enabled: true
+      single: true
+    internet_gateway:
+      name: "kr-carevo-dev-internet-gateway"
+      enabled: true
+    route_tables:
+      - name: "kr-carevo-dev-public-rt"
+        routes:
+          - destination: "0.0.0.0/0"
+            target: "internet_gateway"
+```
+
+The VPC architecture and resource relationships are shown below:
+
+![](.docs/kr_vpc_aws.png)
+
+---
+
+## Running Terraform Locally with IAM Roles Anywhere
+
+Execute infrastructure changes on your local machine using keyless authentication backed by your self-signed certificate and IAM Roles Anywhere.
+
+### Prerequisites
+
+- `aws_signing_helper` installed on your PATH ([AWS Roles Anywhere credential helper documentation](https://docs.aws.amazon.com/rolesanywhere/latest/userguide/credential-helper.html))
+- Bootstrap completed (certificate generated, trust anchor and IAM role created per **Step 3** above)
+- `scripts/vars.sh` populated with the following ARNs from the bootstrap output:
+  - `trust_anchor_arn`
+  - `role_arn`
+  - `rolesanywhere_profile_arn`
+
+### Basic Usage
+
+```bash
+./scripts/runner.sh [ENV] [COMMAND] [PROGRAM] [FLAGS]
+```
+
+**ENV** — deployment environment (`dev`, `stage`, `prod`); defaults to `dev`  
+**COMMAND** — terraform command (`plan`, `apply`, `destroy`); defaults to `plan`  
+**PROGRAM** — program SID (e.g., `kr-carevo`); defaults to first program in `org.yml`  
+**FLAGS** — additional Terraform arguments (e.g., `-var="vpc_cidr=10.20.0.0/16"`)
+
+### Examples
+
+```bash
+# Plan infrastructure for dev environment (defaults to first program in org.yml)
+./scripts/runner.sh dev plan
+
+# Apply changes for staging environment
+./scripts/runner.sh stage apply
+
+# Target a specific program within an environment
+./scripts/runner.sh dev apply kr-otherprog
+
+# Pass Terraform variables via command line
+./scripts/runner.sh prod apply kr-carevo -var="vpc_cidr=10.20.0.0/16"
+
+# Destroy infrastructure (requires confirmation)
+./scripts/runner.sh dev destroy kr-carevo
+```
+
+### How the Runner Works
+
+1. **Resolves environment and component** — reads `ENV` and `PROGRAM` arguments
+2. **Generates Terraform variables** — calls `scripts/replace-vars.sh <SID> <ENV>` to parse `org.yml` and `environment/<ENV>/security/network.yaml`, then writes:
+   - `core/terraform.tfvars` (org, program, environment tags)
+   - `core/variables/network.auto.tfvars` (VPC, subnet, NAT config)
+   - `core/variables/security.auto.tfvars` (security group and NACL rules)
+3. **Sets up AWS credentials** — writes an AWS CLI named profile that uses `aws_signing_helper` to exchange your X.509 certificate for temporary STS credentials automatically
+4. **Executes Terraform** — runs `terraform init` and your requested command (plan/apply/destroy) from the `core/` directory
+
+### Outputs
+
+- **After `plan`** — `.tfplan` file saved to `core/` for review before apply
+- **After `apply`** — Terraform state written to `core/terraform.tfstate` and remote state backend (if configured)
+- **Logs** — full Terraform output streamed to stdout
+
+Example output showing applied infrastructure:
+
+![](.docs/tf_apply.png)
+
+---
+
+## Running Terraform via GitHub Actions
+
+Deploy infrastructure automatically from GitHub workflows using OIDC federation for keyless AWS authentication via the `krypton-hosting-gha-exec` role (created during **Step 3b** bootstrap).
+
+### Workflow Configuration
+
+Add the following permissions and `configure-aws-credentials` step to any `.github/workflows/` YAML file that needs AWS access:
+
+```yaml
+permissions:
+  id-token: write   # Required for OIDC token exchange
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/krypton-hosting-gha-exec
+          aws-region: us-east-1
+
+      - name: Run Terraform
+        run: |
+          cd core
+          terraform init
+          terraform plan -out=tfplan
+          terraform apply tfplan
+```
+
+**Replace `<ACCOUNT_ID>`** with your AWS account ID (printed at the end of `create-gha-role.sh` during bootstrap).
+
+### Role Scope
+
+The `krypton-hosting-gha-exec` role trust policy is pinned to the exact repository and branch via the `role-gha-sts.json` condition:
+
+```json
+"token.actions.githubusercontent.com:sub": [
+  "repo:VinaSundar-Nat/Krypton.IAC.AWS.Hosting:ref:refs/heads/main"
+]
+```
+
+If you change the source repository or branch, update the trust policy in the AWS Console (**IAM → Roles → krypton-hosting-gha-exec → Trust relationships**) or re-run `create-gha-role.sh` with the new repository details.
+
+---
+
 ## Next Steps
 
 - Replace the self-signed certificate with one issued by your CA provider before production use
@@ -304,3 +511,15 @@ Click into the trust anchor `krypton-hosting-platform-digiplac` and expand **Sou
 - Add the Roles Anywhere ARNs to the appropriate `terraform.tfvars` files (`trust_anchor_arn`, `role_arn`, `rolesanywhere_profile_arn`)
 - Update `roles/role-gha-sts.json` with the real account ID and add it to your GitHub Actions workflow (`role-to-assume`)
 - Scope down `roles/admin-role.json` to only the Terraform actions required by your deployment
+
+---
+
+## Future Commits: Resource Documentation & LLM-Ready Specifications
+
+Going forward, commits to this repository will include:
+
+- **Resource documentation (`.md` files)** — design rationale, configuration details, and integration points for each AWS resource and Terraform module. These files provide human-readable reference material for understanding infrastructure decisions and dependencies.
+
+- **`llms.txt`** — structured resource specifications and control flow diagrams designed for LLM agents to understand and reason about infrastructure changes. This enables AI-assisted planning and code generation without manual setup context gathering.
+
+These artifacts will accelerate onboarding, reduce manual documentation burden, and enable intelligent automation while maintaining comprehensive human-readable documentation.

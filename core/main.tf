@@ -30,6 +30,7 @@ provider "aws" {
       Environment = var.environment
       Program     = var.program
       Organization = var.organisation
+      email       = "vinasundar.aws@gmail.com"
       ManagedBy   = "Terraform"
     }
   }
@@ -60,5 +61,14 @@ provider "aws" {
       web_identity_token_file = var.web_identity_token_file
       session_name            = "github-actions-terraform"
     }
+  }
+}
+
+module "deploy-kr-vpc" {
+  source   = "./module/network/vpc"
+  cidr     = var.vpc_cidr
+  enable_dns = var.vpc_enable_dns
+  tags     = {
+    Name = var.vpc_tags["name"]
   }
 }

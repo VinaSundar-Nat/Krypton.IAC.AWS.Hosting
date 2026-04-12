@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
 # vars.sh
-# Default configuration for create-cert.sh
-# Override any variable by setting it in the environment before sourcing,
-# or by passing the corresponding flag to create-cert.sh.
+# Default configuration for runner.sh - locally executed Terraform with IAM Roles Anywhere.
 # -----------------------------------------------------------------------------
 
 CERT_CN="krypton-hosting-provider-trust-anchor"
@@ -19,3 +17,4 @@ TA_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${TA_ROLE_NAME}"
 TRUST_ANCHOR_ARN="arn:aws:rolesanywhere:${AWS_REGION}:${AWS_ACCOUNT_ID}:trust-anchor/ANCHOR_ID"
 ROLESANYWHERE_PROFILE_ARN="arn:aws:rolesanywhere:${AWS_REGION}:${AWS_ACCOUNT_ID}:profile/PROFILE_ID"
 AWS_PROFILE_NAME="krypton-ta"
+

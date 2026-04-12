@@ -24,8 +24,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-SID="${1:?Usage: replace-vars.sh <sid>  e.g. replace-vars.sh kr-carevo}"
-
+SID="${1:?Usage: replace-vars.sh <sid> <env>  e.g. replace-vars.sh kr-carevo dev}"
+ENV="${2:?Usage: replace-vars.sh <sid> <env>  e.g. replace-vars.sh kr-carevo dev}"  # extract env name from sid (assumes sid format: kr-<env>)
 OUT_DIR="${REPO_ROOT}/core/variables"
 TFVARS="${REPO_ROOT}/core/terraform.tfvars"
 TFVARS_TPL="${REPO_ROOT}/core/terraform.tfvars.tpl"
@@ -46,7 +46,7 @@ fi
 # ── Resolve program / environment from org.yml ───────────────────────────────
 ORG_NAME="$(yq '.organisation.name' "${ORG_YAML}")"
 PROGRAM_NAME="$(yq '.organisation.program[] | select(.sid == "'"${SID}"'") | .name' "${ORG_YAML}")"
-ENV_NAME="$(yq '.organisation.program[] | select(.sid == "'"${SID}"'") | .tags.environment' "${ORG_YAML}")"
+ENV_NAME="${ENV}"
 
 if [[ -z "${PROGRAM_NAME}" || "${PROGRAM_NAME}" == "null" ]]; then
   echo "ERROR: sid '${SID}' not found in ${ORG_YAML}" >&2
@@ -84,7 +84,8 @@ _sub() {
 dest  = "${dest}"
 token = "${token}"
 block = open("${tmp}").read()
-open(dest, "w").write(open(dest).read().replace(token, block))
+content = open(dest).read()
+open(dest, "w").write(content.replace(token, block))
 PYEOF
   rm -f "${tmp}"
 }
@@ -107,8 +108,9 @@ echo "Written: ${TFVARS}"
 # yq selector: pick the component matching the given SID
 SEL='.component[] | select(.sid == "'"${SID}"'")'
 
-VPC_NAME="$(yq "${SEL} | .vpc.name"               "${NET_YAML}")"
-VPC_CIDR="$(yq "${SEL} | .vpc.cidr"               "${NET_YAML}")"
+VPC_NAME="$(yq "${SEL} | .vpc.tags.name" "${NET_YAML}")"
+VPC_CIDR="$(yq "${SEL} | .vpc.cidr"  "${NET_YAML}")"
+VPC_ENABLE_DNS="$(yq "${SEL} | .vpc.enabledns"  "${NET_YAML}")"
 NAT_NAME="$(yq    "${SEL} | .nat_gateway.name"    "${NET_YAML}")"
 NAT_ENABLED="$(yq "${SEL} | .nat_gateway.enabled" "${NET_YAML}")"
 NAT_SINGLE="$(yq  "${SEL} | .nat_gateway.single"  "${NET_YAML}")"
@@ -120,6 +122,15 @@ DHCP_ENABLED="$(yq "${SEL} | .dchp_options.enabled"             "${NET_YAML}")"
 DHCP_DOMAIN="$(yq  "${SEL} | .dchp_options.domain_name"         "${NET_YAML}")"
 DHCP_DNS="$(yq     "${SEL} | .dchp_options.domain_name_servers" "${NET_YAML}")"
 DHCP_HCL="{ enabled = ${DHCP_ENABLED}, domain_name = \"${DHCP_DOMAIN}\", domain_name_servers = \"${DHCP_DNS}\" }"
+
+# Build vpc_tags map from network.yaml component.vpc.tags
+VPC_TAGS_HCL="{"
+while IFS= read -r key; do
+  [[ -z "$key" || "$key" == "null" ]] && continue
+  val="$(yq "${SEL} | .vpc.tags.${key}" "${NET_YAML}")"
+  VPC_TAGS_HCL+=$'\n'"  ${key} = \"${val}\""
+done <<< "$(yq "${SEL} | .vpc.tags | keys | .[]" "${NET_YAML}")"
+VPC_TAGS_HCL+=$'\n'"}"
 
 # Build AZ list in HCL format: ["us-east-1a", "us-east-1b", ...]
 AZ_COUNT="$(yq "${SEL} | .vpc.availability_zones | length" "${NET_YAML}")"
@@ -182,6 +193,8 @@ _sub "${NET_DEST}" "REPLACE_PROGRAM"            "${PROGRAM_NAME}"
 _sub "${NET_DEST}" "REPLACE_ENVIRONMENT"        "${ENV_NAME}"
 _sub "${NET_DEST}" "REPLACE_VPC_NAME"           "${VPC_NAME}"
 _sub "${NET_DEST}" "REPLACE_VPC_CIDR"           "${VPC_CIDR}"
+_sub "${NET_DEST}" "REPLACE_VPC_ENABLE_DNS"     "${VPC_ENABLE_DNS}"
+_sub "${NET_DEST}" "REPLACE_VPC_TAGS"           "${VPC_TAGS_HCL}"
 _sub "${NET_DEST}" "REPLACE_AVAILABILITY_ZONES" "${AZS_HCL}"
 _sub "${NET_DEST}" "REPLACE_SUBNETS"            "${SUBNETS_HCL}"
 _sub "${NET_DEST}" "REPLACE_DHCP_OPTIONS"       "${DHCP_HCL}"

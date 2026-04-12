@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
 # create-cert.sh
-# Generates a self-signed CA certificate suitable for use as an
-# AWS IAM Roles Anywhere Trust Anchor.
+# Generates two certificates for AWS IAM Roles Anywhere:
+#
+#   1. CA certificate  (<cn>.cert.pem + <cn>.key.pem)
+#      → Upload to IAM Roles Anywhere as the Trust Anchor source.
+#        Keep the CA key secret — it is only needed to sign leaf certs.
+#
+#   2. Leaf certificate  (<role-name>.cert.pem + <role-name>.key.pem)
+#      → Used by aws_signing_helper at runtime (referenced by runner.sh).
+#        This is the cert that IAM Roles Anywhere validates against the CA.
+#
 # Requirements: openssl >= 1.1.1
 # -----------------------------------------------------------------------------
 set -euo pipefail
@@ -135,18 +143,99 @@ echo ""
 echo "Extensions:"
 openssl x509 -in "$CERT_FILE" -noout -text | grep -E -A 2 "Basic Constraints|Key Usage"
 
-# ── Summary ───────────────────────────────────────────────────────────────────
-cat <<EOF
+# =============================================================================
+# Leaf certificate — signed by the CA above
+# Used by aws_signing_helper in runner.sh
+# =============================================================================
+SAFE_ROLE="$(echo "$TA_ROLE_NAME" | tr -- '- ' '_')"
+LEAF_KEY_FILE="${OUT_DIR}/${SAFE_ROLE}.key.pem"
+LEAF_CERT_FILE="${OUT_DIR}/${SAFE_ROLE}.cert.pem"
+LEAF_CSR_FILE="$(mktemp)"
 
-Done.
-  Private key : $KEY_FILE   (keep secret — never upload this)
-  Certificate : $CERT_FILE  (upload this to IAM Roles Anywhere)
+for f in "$LEAF_KEY_FILE" "$LEAF_CERT_FILE"; do
+  if [[ -e "$f" ]]; then
+    echo "ERROR: Output file already exists: $f" >&2
+    echo "       Delete it first or choose a different --out-dir / role name." >&2
+    exit 1
+  fi
+done
 
-To upload the certificate as a Trust Anchor:
-  aws rolesanywhere create-trust-anchor \\
-    --name "${CERT_CN}" \\
-    --source '{"sourceType":"CERTIFICATE_BUNDLE","sourceData":{"x509CertificateData":"'"$(openssl x509 -in "$CERT_FILE" -outform PEM | awk '{printf "%s\\n", $0}')"'"}}' \\
-    --enabled \\
-    --region <your-region>
+echo ""
+echo "Generating leaf certificate for role: ${TA_ROLE_NAME}..."
 
+# Generate leaf private key (same algorithm as CA)
+if [[ "$KEY_TYPE" == "ec" ]]; then
+  openssl ecparam -genkey -name "$EC_CURVE" -noout -out "$LEAF_KEY_FILE" 2>/dev/null
+else
+  openssl genrsa -out "$LEAF_KEY_FILE" "$RSA_BITS" 2>/dev/null
+fi
+chmod 600 "$LEAF_KEY_FILE"
+
+# Generate leaf CSR (same subject DN as CA, CN overridden to role name)
+LEAF_SUBJECT="/CN=${TA_ROLE_NAME}/O=${CERT_ORG}/OU=${CERT_OU}/C=${CERT_COUNTRY}"
+[[ -n "$CERT_STATE"    ]] && LEAF_SUBJECT+="/ST=${CERT_STATE}"
+[[ -n "$CERT_LOCALITY" ]] && LEAF_SUBJECT+="/L=${CERT_LOCALITY}"
+
+openssl req -new \
+  -key "$LEAF_KEY_FILE" \
+  -subj "$LEAF_SUBJECT" \
+  -out "$LEAF_CSR_FILE" 2>/dev/null
+
+# X.509 extensions for a leaf / end-entity certificate
+# CA:FALSE        — must NOT be a CA cert
+# digitalSignature — required for IAM Roles Anywhere client auth
+# clientAuth      — extended key usage required by IAM Roles Anywhere
+LEAF_EXT_FILE="$(mktemp)"
+cat > "$LEAF_EXT_FILE" <<'EOF'
+[v3_leaf]
+basicConstraints       = critical,CA:FALSE
+keyUsage               = critical,digitalSignature
+extendedKeyUsage       = clientAuth
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer:always
 EOF
+
+# Sign the leaf cert with the CA
+openssl x509 -req \
+  -days "$CERT_DAYS" \
+  -in "$LEAF_CSR_FILE" \
+  -CA "$CERT_FILE" -CAkey "$KEY_FILE" -CAcreateserial \
+  -extfile "$LEAF_EXT_FILE" \
+  -extensions v3_leaf \
+  -sha256 \
+  -out "$LEAF_CERT_FILE" 2>/dev/null
+chmod 644 "$LEAF_CERT_FILE"
+
+rm -f "$LEAF_CSR_FILE" "$LEAF_EXT_FILE"
+
+echo ""
+echo "Leaf certificate details:"
+openssl x509 -in "$LEAF_CERT_FILE" -noout \
+  -subject -issuer -dates \
+  -fingerprint -sha256
+echo ""
+echo "Extensions:"
+openssl x509 -in "$LEAF_CERT_FILE" -noout -text | grep -E -A 2 "Basic Constraints|Key Usage|Extended Key Usage"
+
+# ── Summary ───────────────────────────────────────────────────────────────────
+# cat <<EOF
+
+# Done.
+#   CA certificate : $CERT_FILE       (upload to IAM Roles Anywhere Trust Anchor)
+#   CA private key : $KEY_FILE        (keep secret — only needed to sign leaf certs)
+
+#   Leaf certificate : $LEAF_CERT_FILE  (used by aws_signing_helper in runner.sh)
+#   Leaf private key : $LEAF_KEY_FILE   (keep secret — used by runner.sh at runtime)
+
+# CERT_CN in scripts/vars.sh must remain: ${CERT_CN}
+# runner.sh derives the leaf cert/key paths from TA_ROLE_NAME: ${TA_ROLE_NAME}
+
+# To upload the CA certificate as a Trust Anchor:
+#   aws rolesanywhere create-trust-anchor \\
+#     --name "${CERT_CN}" \\
+#     --source '{"sourceType":"CERTIFICATE_BUNDLE","sourceData":{"x509CertificateData":"'"$(openssl x509 -in "$CERT_FILE" -outform PEM | awk '{printf "%s\\n", $0}')"'"}}' \\
+#     --enabled \\
+#     --region ${AWS_REGION}
+# EOF
+
+# EOF

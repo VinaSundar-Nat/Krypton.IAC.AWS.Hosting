@@ -29,6 +29,16 @@ variable "availability_zones" {
   type        = list(string)
 }
 
+variable "vpc_enable_dns" {
+  description = "VPC enable DCHP DNS settings — derived by replace-vars.sh from network.yaml component.enabledns."
+  type        = string
+}
+
+variable "vpc_tags" {
+  description = "VPC tags — derived by replace-vars.sh from network.yaml component.tags."
+  type        = map(string)
+}
+
 # ── Subnet zones ──────────────────────────────────────────────────────────────
 # Keyed by zone label (web | app | data | cache).
 # Values are derived from environment/dev/zoning/*.yml by replace-vars.sh.
