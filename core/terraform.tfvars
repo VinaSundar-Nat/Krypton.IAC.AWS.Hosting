@@ -12,7 +12,8 @@
 # =============================================================================
 
 aws_region = "us-east-1"
-auth_mode = "local" # or "gha"
+# auth_mode is intentionally omitted — supply via TF_VAR_auth_mode env var
+# or -var 'auth_mode=...' flag.  See runner.sh (local) and plan-deploy.yml (gha).
 
 # ── GitHub Actions OIDC ───────────────────────────────────────────────────────
 # Role created by .auth/create-gha-role.sh
