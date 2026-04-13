@@ -67,6 +67,11 @@ jobs:
           chmod +x scripts/install-deps.sh scripts/replace-vars.sh
           scripts/install-deps.sh
           scripts/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
+          # core/network.tf and core/security.tf are gitignored symlinks created
+          # locally by runner.sh.  Recreate them here so Terraform's root module
+          # has the variable declarations it needs.
+          ln -sf variables/network.tf core/network.tf
+          ln -sf variables/security.tf core/security.tf
 
       # ── Step 3: AWS authentication via GitHub STS OIDC ──────────────────────
       - name: Fetch GitHub OIDC token
@@ -152,6 +157,11 @@ jobs:
           chmod +x scripts/install-deps.sh scripts/replace-vars.sh
           scripts/install-deps.sh
           scripts/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
+          # core/network.tf and core/security.tf are gitignored symlinks created
+          # locally by runner.sh.  Recreate them here so Terraform's root module
+          # has the variable declarations it needs.
+          ln -sf variables/network.tf core/network.tf
+          ln -sf variables/security.tf core/security.tf
 
       # OIDC tokens are short-lived and not shared between jobs; re-fetch here
       - name: Fetch GitHub OIDC token
