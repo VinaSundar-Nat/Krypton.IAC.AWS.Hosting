@@ -74,7 +74,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "~1.8"
+          terraform_version: "~1.14"
 
       - name: Terraform init
         working-directory: core
@@ -142,6 +142,8 @@ jobs:
       # Each job runs on a fresh runner; re-run checkout and var replacement
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Replace variable templates
         run: |
