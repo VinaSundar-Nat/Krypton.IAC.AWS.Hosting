@@ -104,7 +104,12 @@ jobs:
             -var-file=variables/security.auto.tfvars \
             -out="${PLAN_FILE}" \
             -lock=false \
-            -detailed-exitcode || PLAN_EXIT=$?
+            -detailed-exitcode 2>&1 | tee /tmp/plan.log
+          PLAN_EXIT=$?
+          # Mask AWS resource IDs from logs (read-only security)
+          grep -oE '(i-[a-f0-9]{8,}|sg-[a-f0-9]{8,}|arn:aws:[a-z0-9-]+:[a-z0-9-]*:[0-9]{12}:[a-z0-9-/]+|vpc-[a-f0-9]{8,}|subnet-[a-f0-9]{8,}|rtb-[a-f0-9]{8,}|nat-[a-f0-9]{8,}|igw-[a-f0-9]{8,})' /tmp/plan.log | sort -u | while read id; do
+            echo "::add-mask::$id"
+          done
           # Exit codes: 0 = no changes, 1 = error, 2 = changes present (expected)
           if [[ "${PLAN_EXIT:-0}" -eq 1 ]]; then
             echo "Terraform plan returned an error." >&2
@@ -197,7 +202,11 @@ jobs:
             echo "ERROR: No plan file found in downloaded artifact." >&2
             exit 1
           fi
-          terraform apply -auto-approve "${PLAN_FILE}"
+          terraform apply -auto-approve "${PLAN_FILE}" 2>&1 | tee /tmp/apply.log
+          # Mask AWS resource IDs from logs (read-only security)
+          grep -oE '(i-[a-f0-9]{8,}|sg-[a-f0-9]{8,}|arn:aws:[a-z0-9-]+:[a-z0-9-]*:[0-9]{12}:[a-z0-9-/]+|vpc-[a-f0-9]{8,}|subnet-[a-f0-9]{8,}|rtb-[a-f0-9]{8,}|nat-[a-f0-9]{8,}|igw-[a-f0-9]{8,})' /tmp/apply.log | sort -u | while read id; do
+            echo "::add-mask::$id"
+          done
         env:
           TF_VAR_auth_mode: "gha"
           TF_VAR_gha_role_arn: ${{ secrets.GHA_ROLE_ARN }}
