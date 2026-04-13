@@ -218,6 +218,8 @@ The output confirms:
 
 #### Trust policy (`roles/role-gha-sts.json`)
 
+The trust policy accepts OIDC tokens from both the **plan job** (via `ref:refs/heads/main`) and **deploy jobs** (via `environment:*-approval` contexts):
+
 ```json
 {
   "Version": "2012-10-17",
@@ -231,9 +233,14 @@ The output confirms:
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
           "token.actions.githubusercontent.com:sub": [
-            "repo:VinaSundar-Nat/Krypton.IAC.AWS.Hosting:ref:refs/heads/main"
+            "repo:VinaSundar-Nat/Krypton.IAC.AWS.Hosting:ref:refs/heads/main",
+            "repo:VinaSundar-Nat/Krypton.IAC.AWS.Hosting:environment:dev-approval",
+            "repo:VinaSundar-Nat/Krypton.IAC.AWS.Hosting:environment:stage-approval",
+            "repo:VinaSundar-Nat/Krypton.IAC.AWS.Hosting:environment:prod-approval"
           ]
         }
       }
@@ -242,7 +249,13 @@ The output confirms:
 }
 ```
 
-> **Note:** `StringEquals` on `:sub` pins the role to the exact repository and branch. Update the value in `roles/role-gha-sts.json` if the source repo or branch changes.
+**Key Points:**
+- **Plan job** uses the `ref:` claim (main branch) to authenticate and generate the plan
+- **Deploy job** uses the `environment:` claim (e.g., `dev-approval`) after approval, allowing temporary elevated access for apply-only operations
+- **Why two claims?** OIDC token subject differs when the job runs in an environment context vs. running from the workflow ref alone
+- **Environment-based gating:** Each environment (`dev-approval`, `stage-approval`, `prod-approval`) must be configured with Required Reviewers in GitHub (Settings → Environments) to enforce manual approval before deploy
+
+> **Note:** Update `roles/role-gha-sts.json` if you add new environments or change the repository name.
 
 #### GitHub Actions workflow usage
 
