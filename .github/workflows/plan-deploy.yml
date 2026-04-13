@@ -98,6 +98,8 @@ jobs:
           PLAN_FILE="${RUNNER_TEMP}/kr_ops_${{ inputs.environment }}_$(date -u +%Y%m%d_%H%M%S).tfplan"
           echo "PLAN_FILE=${PLAN_FILE}" >> "${GITHUB_ENV}"
           terraform plan \
+            -var='auth_mode=gha' \
+            -var="gha_role_arn=${{ secrets.GHA_ROLE_ARN }}" \
             -var-file=variables/network.auto.tfvars \
             -var-file=variables/security.auto.tfvars \
             -out="${PLAN_FILE}" \
