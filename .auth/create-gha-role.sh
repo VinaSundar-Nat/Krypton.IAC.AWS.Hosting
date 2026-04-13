@@ -36,6 +36,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# ── Get account ID first (needed for policy substitution) ──────────────────────
+ACCOUNT_ID="$(aws sts get-caller-identity --profile "$AWS_PROFILE" --output text --query Account)"
+echo "AWS Account ID: ${ACCOUNT_ID}"
+
 # ── Create IAM role ───────────────────────────────────────────────────────────
 POLICY_FILE="${SCRIPT_DIR}/roles/role-gha-sts.json"
 ROLE_NAME="${GHA_ROLE_NAME}"
@@ -70,9 +74,14 @@ if [[ -n "$EXISTING_ROLE_ARN" ]]; then
   fi
 else
   echo "Creating IAM role '${ROLE_NAME}'..."
+  # Substitute the real account ID in the policy document
+  POLICY_TEMP="$(mktemp)"
+  sed "s/123456789012/${ACCOUNT_ID}/g" "$POLICY_FILE" > "$POLICY_TEMP"
+  trap "rm -f $POLICY_TEMP" EXIT
+  
   ROLE_RESPONSE="$(aws iam create-role \
     --role-name                   "$ROLE_NAME" \
-    --assume-role-policy-document "file://${POLICY_FILE}" \
+    --assume-role-policy-document "file://${POLICY_TEMP}" \
     --profile                     "$AWS_PROFILE" \
     --output                      json)"
 
@@ -117,9 +126,6 @@ aws iam put-role-policy \
   --policy-document "file://${PERMS_FILE}" \
   --profile         "$AWS_PROFILE"
 echo "Inline policy attached."
-
-# ── Derive account ID from caller identity ───────────────────────────────────────────
-ACCOUNT_ID="$(aws sts get-caller-identity --profile "$AWS_PROFILE" --output text --query Account)"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
