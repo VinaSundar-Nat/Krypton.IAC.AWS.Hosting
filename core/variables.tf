@@ -53,3 +53,9 @@ variable "environment" {
   description = "Deployment environment (dev | stage | prod)."
   type        = string
 }
+
+variable "created_date" {
+  description = "Date when the resources were created."
+  type        = string
+  default = formatdate("YYYY-MM-DD", time_static.created_at.rfc3339)
+}

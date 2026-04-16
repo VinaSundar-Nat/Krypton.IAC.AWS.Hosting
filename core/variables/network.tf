@@ -25,7 +25,7 @@ variable "vpc_cidr" {
 
 # ── Availability Zones ────────────────────────────────────────────────────────
 variable "availability_zones" {
-  description = "Ordered list of AZs to spread subnets across."
+  description = "Ordered list of AZs to spread subnets across — derived by replace-vars.sh from network.yaml component.availability_zone."
   type        = list(string)
 }
 
@@ -57,10 +57,11 @@ variable "subnet_zones" {
 
 # ── Subnets ───────────────────────────────────────────────────────────────────
 # Explicit subnet definitions sourced from network.yaml component.subnets[].
-# Each entry carries a logical name, CIDR, type (public|private), and AZ.
+# Each entry carries a logical name, CIDR, type (public|private), and list of AZs.
 variable "subnets" {
   description = <<-EOT
     List of subnet definitions sourced from network.yaml component.subnets[].
+    Each subnet specifies availability zones (list of strings) from component.availability_zone.
     type = public  → associated with IGW route table.
     type = private → associated with NAT gateway route table.
   EOT
@@ -68,9 +69,17 @@ variable "subnets" {
     name              = string
     cidr              = string
     type              = string
-    availability_zone = string
+    availability_zone = list(string)
   }))
   default = []
+
+  validation {
+    condition = alltrue([
+      for subnet in var.subnets :
+      contains(["public", "private"], subnet.type)
+    ])
+    error_message = "Subnet type must be either 'public' or 'private'."
+  }
 }
 
 # ── DHCP Options ──────────────────────────────────────────────────────────────
@@ -79,12 +88,14 @@ variable "dhcp_options" {
   type = object({
     enabled                = bool
     domain_name            = string
-    domain_name_servers    = string
+    domain_name_servers    = list(string)
+    provider               = string
   })
   default = {
     enabled             = false
     domain_name         = ""
-    domain_name_servers = "AmazonProvidedDNS"
+    domain_name_servers = ["AmazonProvidedDNS"]
+    provider            = "aws"
   }
 }
 
@@ -125,12 +136,14 @@ variable "internet_gateway_enabled" {
 variable "route_tables" {
   description = <<-EOT
     List of route table definitions sourced from network.yaml component.route_tables[].
-    Each entry carries a name and a list of routes with a destination CIDR.
+    Each entry carries: name, type (public|private), and routes (with destination CIDR and target).
   EOT
   type = list(object({
     name   = string
+    type   = string
     routes = list(object({
       destination = string
+      target      = optional(string, "")
     }))
   }))
   default = []
