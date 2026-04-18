@@ -28,8 +28,9 @@ locals {
 
   # For CIDR calculation reference: calculate how many bits to add based on AZ count
   # e.g., if 2 AZs: add 1 bit (2^1 = 2 subnets), if 4 AZs: add 2 bits (2^2 = 4 subnets)
+  # max(..., 1) guards against single-AZ subnets where log(1,2)=0.
   cidr_bits_map = {
-    for subnet in var.subnets : subnet.name => ceil(log(length(subnet.availability_zone), 2))
+    for subnet in var.subnets : subnet.name => max(ceil(log(length(subnet.availability_zone), 2)), 1)
   }
 }
 
@@ -46,10 +47,10 @@ resource "aws_subnet" "kr_subnet" {
   vpc_id            = var.vpc_id
   availability_zone = each.value.az
 
-  # Calculate CIDR block based on AZ count and index
-  # Formula: cidrsubnet(vpc_cidr, additional_bits, index_within_subnets)
+  # Calculate CIDR block by splitting the subnet's own base CIDR across AZs
+  # Formula: cidrsubnet(subnet_base_cidr, additional_bits, az_index)
   cidr_block = cidrsubnet(
-    var.vpc_cidr,
+    each.value.base_cidr,
     local.cidr_bits_map[each.value.subnet_name],
     each.value.az_index
   )

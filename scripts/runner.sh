@@ -151,9 +151,9 @@ VAR_FILES=( -var-file=variables/network.auto.tfvars -var-file=variables/security
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " terraform init (local — backend disabled)"
+echo " terraform init (local — local backend)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-terraform init -backend=false
+terraform init
 
 # ── Plan ─────────────────────────────────────────────────────────────────────
 PLAN_FLAGS=( "${VAR_FILES[@]}" -out="${KR_PLAN}" -lock=false -detailed-exitcode )

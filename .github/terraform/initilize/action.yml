@@ -1,8 +1,10 @@
 # =============================================================================
 # Composite action: Terraform Init (S3 backend)
 #
-# Initialises Terraform with an S3 remote backend.
-# Called by both the plan and deploy jobs in plan-deploy.yml.
+# Creates a backend.tf file in the working directory containing the S3 backend
+# block, then initialises Terraform with -backend-config flags.
+# No backend block exists in source — this action generates it at runtime for
+# GHA only. Local runs have no backend.tf and use the local backend natively.
 #
 # Usage:
 #   - name: Terraform init
@@ -17,7 +19,7 @@
 
 name: Terraform Init
 description: >
-  Initialises Terraform with an S3 remote backend.
+  Generates a backend.tf for S3 state and initialises Terraform.
   ${env} in tf_state_key is replaced with the environment value at runtime.
 
 inputs:
@@ -44,6 +46,16 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Generate backend.tf
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        cat > backend.tf << 'TFEOF'
+        terraform {
+          backend "s3" {}
+        }
+        TFEOF
+
     - name: Terraform init
       shell: bash
       working-directory: ${{ inputs.working_directory }}
