@@ -1,0 +1,60 @@
+# =============================================================================
+# Composite action: Terraform Init (S3 backend)
+#
+# Initialises Terraform with an S3 remote backend.
+# Called by both the plan and deploy jobs in plan-deploy.yml.
+#
+# Usage:
+#   - name: Terraform init
+#     uses: ./.github/terraform/initilize
+#     with:
+#       environment:     ${{ inputs.environment }}
+#       tf_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+#       tf_state_key:    ${{ vars.TF_STATE_KEY }}
+#       tf_state_region: ${{ vars.TF_STATE_REGION }}
+#       gha_role_arn:    ${{ secrets.GHA_ROLE_ARN }}
+# =============================================================================
+
+name: Terraform Init
+description: >
+  Initialises Terraform with an S3 remote backend.
+  ${env} in tf_state_key is replaced with the environment value at runtime.
+
+inputs:
+  environment:
+    description: 'Target environment (dev|stage|prod). Replaces ${env} in tf_state_key.'
+    required: true
+  tf_state_bucket:
+    description: 'S3 bucket name for Terraform state storage.'
+    required: true
+  tf_state_key:
+    description: 'S3 key path for state file. Use ${env} as the environment placeholder.'
+    required: true
+  tf_state_region:
+    description: 'AWS region where the S3 state bucket resides.'
+    required: true
+  gha_role_arn:
+    description: 'IAM role ARN assumed by the Terraform AWS provider via OIDC.'
+    required: true
+  working_directory:
+    description: 'Directory containing the Terraform root module.'
+    required: false
+    default: 'core'
+
+runs:
+  using: composite
+  steps:
+    - name: Terraform init
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        TF_KEY=$(echo "${{ inputs.tf_state_key }}" | sed 's/${env}/${{ inputs.environment }}/g')
+        terraform init \
+          -backend-config="bucket=${{ inputs.tf_state_bucket }}" \
+          -backend-config="key=${TF_KEY}" \
+          -backend-config="region=${{ inputs.tf_state_region }}" \
+          -backend-config="encrypt=true"
+      env:
+        TF_VAR_auth_mode: gha
+        TF_VAR_gha_role_arn: ${{ inputs.gha_role_arn }}
+        TF_VAR_web_identity_token_file: /tmp/web-identity-token

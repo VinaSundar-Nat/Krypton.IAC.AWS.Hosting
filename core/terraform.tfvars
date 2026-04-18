@@ -11,7 +11,7 @@
 # DO NOT set auth_mode here — export TF_VAR_auth_mode=gha|local at the shell.
 # =============================================================================
 
-aws_region = "us-east-1"
+aws_region = "REPLACE_REGION"
 # auth_mode is intentionally omitted — supply via TF_VAR_auth_mode env var
 # or -var 'auth_mode=...' flag.  See runner.sh (local) and plan-deploy.yml (gha).
 

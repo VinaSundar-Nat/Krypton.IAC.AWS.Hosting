@@ -46,10 +46,15 @@ fi
 # ── Resolve program / environment from org.yml ───────────────────────────────
 ORG_NAME="$(yq '.organisation.name' "${ORG_YAML}")"
 PROGRAM_NAME="$(yq '.organisation.program[] | select(.sid == "'"${SID}"'") | .name' "${ORG_YAML}")"
+REGION="$(yq '.organisation.program[] | select(.sid == "'"${SID}"'") | .region' "${ORG_YAML}")"
 ENV_NAME="${ENV}"
 
 if [[ -z "${PROGRAM_NAME}" || "${PROGRAM_NAME}" == "null" ]]; then
   echo "ERROR: sid '${SID}' not found in ${ORG_YAML}" >&2
+  exit 1
+fi
+if [[ -z "${REGION}" || "${REGION}" == "null" ]]; then
+  echo "ERROR: region not set for sid '${SID}' in ${ORG_YAML}" >&2
   exit 1
 fi
 if [[ -z "${ENV_NAME}" || "${ENV_NAME}" == "null" ]]; then
@@ -99,6 +104,7 @@ cp "${TFVARS_TPL}" "${TFVARS}"
 _sub "${TFVARS}" "REPLACE_ORGANISATION" "${ORG_NAME}"
 _sub "${TFVARS}" "REPLACE_PROGRAM"      "${PROGRAM_NAME}"
 _sub "${TFVARS}" "REPLACE_ENVIRONMENT"  "${ENV_NAME}"
+_sub "${TFVARS}" "REPLACE_REGION"       "${REGION}"
 echo "Written: ${TFVARS}"
 
 # =============================================================================
