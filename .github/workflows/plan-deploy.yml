@@ -64,9 +64,12 @@ jobs:
       # ── Step 2: Replace variable templates ──────────────────────────────────
       - name: Replace variable templates
         run: |
-          chmod +x scripts/install-deps.sh scripts/replace-vars.sh
+          chmod +x scripts/install-deps.sh \
+            scripts/configuration/replace-vars.sh \
+            scripts/configuration/network-vars.sh \
+            scripts/configuration/rules-vars.sh
           scripts/install-deps.sh
-          scripts/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
+          scripts/configuration/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
           # core/network.tf and core/security.tf are gitignored symlinks created
           # locally by runner.sh.  Recreate them here so Terraform's root module
           # has the variable declarations it needs.
@@ -161,9 +164,12 @@ jobs:
 
       - name: Replace variable templates
         run: |
-          chmod +x scripts/install-deps.sh scripts/replace-vars.sh
+          chmod +x scripts/install-deps.sh \
+            scripts/configuration/replace-vars.sh \
+            scripts/configuration/network-vars.sh \
+            scripts/configuration/rules-vars.sh
           scripts/install-deps.sh
-          scripts/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
+          scripts/configuration/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
           # core/network.tf and core/security.tf are gitignored symlinks created
           # locally by runner.sh.  Recreate them here so Terraform's root module
           # has the variable declarations it needs.

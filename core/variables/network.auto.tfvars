@@ -25,7 +25,6 @@ subnets = REPLACE_SUBNETS
 subnet_zones = REPLACE_SUBNET_ZONES
 
 # DHCP options — from network.yaml component.dhcp_options
-# Includes: enabled, domain_name, domain_name_servers (list), provider
 dhcp_options = REPLACE_DHCP_OPTIONS
 
 nat_gateway_name   = "REPLACE_NAT_GATEWAY_NAME"
