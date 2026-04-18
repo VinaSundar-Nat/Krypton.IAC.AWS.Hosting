@@ -203,3 +203,7 @@ core/network.tf
 core/security.tf
 core/.terraform.lock.hcl
 core/terraform.tfstate
+core/backend.tf
+
+*.backup
+*.tfstate.backup

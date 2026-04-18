@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=vars.sh
 source "${SCRIPT_DIR}/vars.sh"
 
-AWS_REGION="${AWS_REGION:-ap-southeast-2}"
+AWS_REGION="${AWS_REGION:-us-east-1}"
 AWS_PROFILE="${AWS_PROFILE:-default}"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────

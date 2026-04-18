@@ -117,12 +117,13 @@ shift 3 || true
 
 # ── Ensure all scripts are executable ───────────────────────────────────────
 chmod u+x "${SCRIPT_DIR}"/*.sh
+chmod u+x "${SCRIPT_DIR}/configuration"/*.sh
 
 # ── Install required tools (yq, etc.) ────────────────────────────────────────
 "${SCRIPT_DIR}/install-deps.sh"
 
 # ── Generate var files from environment YAML ────────────────────────────────────
-"${SCRIPT_DIR}/replace-vars.sh" "${PROGRAM}" "${ENV}"
+"${SCRIPT_DIR}/configuration/replace-vars.sh" "${PROGRAM}" "${ENV}"
 
 # ── Plan file name (timestamp-stamped, cleaned up on exit) ──────────────────
 LOCALDT="$(date +%Y%m%d_%H%M%S)"
@@ -150,7 +151,7 @@ VAR_FILES=( -var-file=variables/network.auto.tfvars -var-file=variables/security
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " terraform init"
+echo " terraform init (local — local backend)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 terraform init
 

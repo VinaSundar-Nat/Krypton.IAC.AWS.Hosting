@@ -64,9 +64,12 @@ jobs:
       # ── Step 2: Replace variable templates ──────────────────────────────────
       - name: Replace variable templates
         run: |
-          chmod +x scripts/install-deps.sh scripts/replace-vars.sh
+          chmod +x scripts/install-deps.sh \
+            scripts/configuration/replace-vars.sh \
+            scripts/configuration/network-vars.sh \
+            scripts/configuration/rules-vars.sh
           scripts/install-deps.sh
-          scripts/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
+          scripts/configuration/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
           # core/network.tf and core/security.tf are gitignored symlinks created
           # locally by runner.sh.  Recreate them here so Terraform's root module
           # has the variable declarations it needs.
@@ -83,13 +86,15 @@ jobs:
         with:
           terraform_version: "~1.14"
 
+      # ── Step 4a: Terraform init (S3 backend) ─────────────────────────────────
       - name: Terraform init
-        working-directory: core
-        run: terraform init
-        env:
-          TF_VAR_auth_mode: "gha"
-          TF_VAR_gha_role_arn: ${{ secrets.GHA_ROLE_ARN }}
-          TF_VAR_web_identity_token_file: "/tmp/web-identity-token"
+        uses: ./.github/terraform/initilize
+        with:
+          environment:     ${{ inputs.environment }}
+          tf_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+          tf_state_key:    ${{ vars.TF_STATE_KEY }}
+          tf_state_region: ${{ vars.TF_STATE_REGION }}
+          gha_role_arn:    ${{ secrets.GHA_ROLE_ARN }}
 
       - name: Terraform plan
         id: plan
@@ -161,9 +166,12 @@ jobs:
 
       - name: Replace variable templates
         run: |
-          chmod +x scripts/install-deps.sh scripts/replace-vars.sh
+          chmod +x scripts/install-deps.sh \
+            scripts/configuration/replace-vars.sh \
+            scripts/configuration/network-vars.sh \
+            scripts/configuration/rules-vars.sh
           scripts/install-deps.sh
-          scripts/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
+          scripts/configuration/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
           # core/network.tf and core/security.tf are gitignored symlinks created
           # locally by runner.sh.  Recreate them here so Terraform's root module
           # has the variable declarations it needs.
@@ -180,12 +188,13 @@ jobs:
           terraform_version: "~1.14"
 
       - name: Terraform init
-        working-directory: core
-        run: terraform init
-        env:
-          TF_VAR_auth_mode: "gha"
-          TF_VAR_gha_role_arn: ${{ secrets.GHA_ROLE_ARN }}
-          TF_VAR_web_identity_token_file: "/tmp/web-identity-token"
+        uses: ./.github/terraform/initilize
+        with:
+          environment:     ${{ inputs.environment }}
+          tf_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+          tf_state_key:    ${{ vars.TF_STATE_KEY }}
+          tf_state_region: ${{ vars.TF_STATE_REGION }}
+          gha_role_arn:    ${{ secrets.GHA_ROLE_ARN }}
 
       - name: Download plan artifact
         uses: actions/download-artifact@v4
