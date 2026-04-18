@@ -13,20 +13,9 @@ locals {
     for rt in var.route_tables : rt.name => rt
   }
 
-  # Per-table: whether an existing route table was found by Name tag
-  rt_exists = {
-    for rt_name, rt in local.route_tables_map :
-    rt_name => length(data.aws_route_tables.existing[rt_name].ids) > 0
-  }
-
-  # Resolve the ID — use the existing one if found, otherwise the newly created one
+  # Resolve the Route Table ID from the created resource
   rt_ids = {
-    for rt_name, rt in local.route_tables_map :
-    rt_name => (
-      local.rt_exists[rt_name]
-      ? data.aws_route_tables.existing[rt_name].ids[0]
-      : aws_route_table.kr_route_table[rt_name].id
-    )
+    for rt_name in keys(local.route_tables_map) : rt_name => aws_route_table.kr_route_table[rt_name].id
   }
 
   # Flatten subnets for association by type
@@ -39,7 +28,7 @@ locals {
         subnet_id        = subnet.subnet_id
         subnet_type      = subnet.type
         subnet_name      = subnet.name
-        az_key           = "${rt_name}-${subnet.subnet_id}"
+        az_key           = "${rt_name}-${subnet.key}"
       }
       if subnet.type == rt.type
     ]
@@ -64,25 +53,9 @@ locals {
   }
 }
 
-# ── Check for existing Route Tables by Name tag (returns empty list — never errors) ──
-data "aws_route_tables" "existing" {
-  for_each = var.enabled ? local.route_tables_map : {}
-
-  vpc_id = var.vpc_id
-
-  filter {
-    name   = "tag:Name"
-    values = [each.key]
-  }
-}
-
-# ── Create only when no matching Route Table exists ───────────────────────────
+# ── Create Route Tables ────────────────────────────────────────────────────────
 resource "aws_route_table" "kr_route_table" {
-  for_each = {
-    for rt_name, rt in local.route_tables_map :
-    rt_name => rt
-    if var.enabled && !local.rt_exists[rt_name]
-  }
+  for_each = var.enabled ? local.route_tables_map : {}
 
   vpc_id = var.vpc_id
 
@@ -100,13 +73,8 @@ resource "aws_route_table" "kr_route_table" {
 }
 
 # ── Add routes dynamically based on route definitions ────────────────────────────
-# Routes are only added to newly created tables; existing tables retain their routes.
 resource "aws_route" "kr_rt_routes" {
-  for_each = {
-    for key, route in local.routes_map :
-    key => route
-    if var.enabled && !local.rt_exists[route.route_table_name]
-  }
+  for_each = var.enabled ? local.routes_map : {}
 
   route_table_id         = local.rt_ids[each.value.route_table_name]
   destination_cidr_block = each.value.destination

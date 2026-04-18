@@ -10,8 +10,8 @@ output "route_table_ids" {
 output "public_route_table_ids" {
   description = "List of public route table IDs."
   value = [
-    for rt_name, rt in var.route_tables :
-    local.rt_ids[rt_name]
+    for rt in var.route_tables :
+    local.rt_ids[rt.name]
     if rt.type == "public"
   ]
 }
@@ -19,8 +19,8 @@ output "public_route_table_ids" {
 output "private_route_table_ids" {
   description = "List of private route table IDs."
   value = [
-    for rt_name, rt in var.route_tables :
-    local.rt_ids[rt_name]
+    for rt in var.route_tables :
+    local.rt_ids[rt.name]
     if rt.type == "private"
   ]
 }

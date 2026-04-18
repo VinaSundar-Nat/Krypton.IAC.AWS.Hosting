@@ -13,9 +13,10 @@ variable "vpc_id" {
 variable "subnet_details" {
   description = <<-EOT
     List of subnet details from subnet module output.
-    Each entry contains: subnet_id, name, cidr_block, type, az, vpc_id.
+    Each entry contains: key, subnet_id, name, cidr_block, type, az, vpc_id.
   EOT
   type = list(object({
+    key         = string
     subnet_id   = string
     name        = string
     cidr_block  = string

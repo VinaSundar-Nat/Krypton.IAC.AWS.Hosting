@@ -38,33 +38,9 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
-# ── Check for existing subnets by name and type ────────────────────────────────
-# This prevents recreation if a subnet with the same name and type already exists
-data "aws_subnets" "existing" {
-  for_each = toset(distinct([for subnet in var.subnets : subnet.name]))
-
-  filter {
-    name   = "tag:Name"
-    values = [each.value]
-  }
-
-  filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
-  }
-}
-
 # ── Create subnets with forEach, one per AZ ────────────────────────────────────
-# Subnets are skipped if they already exist in any AZ
 resource "aws_subnet" "kr_subnet" {
-  for_each = (
-    var.enabled && length(var.subnets) > 0
-      ? {
-          for k, v in local.subnets_map : k => v
-          if length(data.aws_subnets.existing[v.subnet_name].ids) == 0
-        }
-      : {}
-  )
+  for_each = var.enabled && length(var.subnets) > 0 ? local.subnets_map : {}
 
 
   vpc_id            = var.vpc_id
@@ -75,7 +51,7 @@ resource "aws_subnet" "kr_subnet" {
   cidr_block = cidrsubnet(
     var.vpc_cidr,
     local.cidr_bits_map[each.value.subnet_name],
-    each.value.az_index + 1
+    each.value.az_index
   )
 
   # Enable DNS hostname assignment for public subnets

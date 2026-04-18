@@ -19,34 +19,9 @@ locals {
   }
 }
 
-# ── Check for existing NAT Gateways by Name tag (one lookup per target AZ) ────
-data "aws_nat_gateways" "existing" {
-  for_each = local.nat_names
-
-  filter {
-    name   = "tag:Name"
-    values = [each.value]
-  }
-
-  filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
-  }
-
-  # Only consider active gateways.
-  filter {
-    name   = "state"
-    values = ["available", "pending"]
-  }
-}
-
-# ── Elastic IPs — one per target AZ, created only when the NAT GW is new ──────
+# ── Elastic IPs — one per target AZ ───────────────────────────────────────────
 resource "aws_eip" "nat" {
-  for_each = {
-    for az, name in local.nat_names :
-    az => name
-    if var.enabled && length(data.aws_nat_gateways.existing[az].ids) == 0
-  }
+  for_each = var.enabled ? local.nat_names : {}
 
   domain = "vpc"
 
@@ -60,13 +35,9 @@ resource "aws_eip" "nat" {
   }
 }
 
-# ── NAT Gateways — skipped when an existing gateway with the same name exists ──
+# ── NAT Gateways ───────────────────────────────────────────────────────────────
 resource "aws_nat_gateway" "kr_nat_gateway" {
-  for_each = {
-    for az, name in local.nat_names :
-    az => name
-    if var.enabled && length(data.aws_nat_gateways.existing[az].ids) == 0
-  }
+  for_each = var.enabled ? local.nat_names : {}
 
   allocation_id = aws_eip.nat[each.key].id
   subnet_id     = var.public_subnet_ids[each.key]
@@ -81,14 +52,9 @@ resource "aws_nat_gateway" "kr_nat_gateway" {
   }
 }
 
-# ── Resolve final NAT gateway IDs (existing or newly created) ──────────────────
+# ── Resolve NAT gateway IDs ────────────────────────────────────────────────────
 locals {
   nat_gateway_ids = {
-    for az, name in local.nat_names :
-    az => (
-      length(data.aws_nat_gateways.existing[az].ids) > 0
-        ? data.aws_nat_gateways.existing[az].ids[0]
-        : aws_nat_gateway.kr_nat_gateway[az].id
-    )
+    for az in local.target_azs : az => aws_nat_gateway.kr_nat_gateway[az].id
   }
 }
