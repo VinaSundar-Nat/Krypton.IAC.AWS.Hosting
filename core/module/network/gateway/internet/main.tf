@@ -6,12 +6,12 @@
 # =============================================================================
 
 locals {
-  igw_exists = length(data.aws_internet_gateways.existing.ids) > 0
-  igw_id     = local.igw_exists ? data.aws_internet_gateways.existing.ids[0] : aws_internet_gateway.main[0].id
+  igw_exists = length(data.aws_internet_gateway.existing.id) > 0
+  igw_id     = local.igw_exists ? data.aws_internet_gateway.existing.id : aws_internet_gateway.kr_igw[0].id
 }
 
 # ── Check for an existing Internet Gateway by Name tag ──────────────────────────
-data "aws_internet_gateways" "existing" {
+data "aws_internet_gateway" "existing" {
   filter {
     name   = "tag:Name"
     values = [var.tags["Name"]]
@@ -24,7 +24,7 @@ data "aws_internet_gateways" "existing" {
 }
 
 # ── Create Internet Gateway only when it doesn't already exist ─────────────────
-resource "aws_internet_gateway" "main" {
+resource "aws_internet_gateway" "kr_igw" {
   count = !local.igw_exists && var.enabled ? 1 : 0
 
   vpc_id = var.vpc_id

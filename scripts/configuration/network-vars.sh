@@ -29,15 +29,15 @@ IGW_NAME="$(yq    "${SEL} | .internet_gateway.name"    "${NET_YAML}")"
 IGW_ENABLED="$(yq "${SEL} | .internet_gateway.enabled" "${NET_YAML}")"
 
 # DHCP options — build HCL object
-DHCP_ENABLED="$(yq "${SEL} | .dchp_options.enabled"             "${NET_YAML}")"
-DHCP_DOMAIN="$(yq  "${SEL} | .dchp_options.domain_name"         "${NET_YAML}")"
-DHCP_PROVIDER="$(yq "${SEL} | .dchp_options.provider"           "${NET_YAML}")"
+DHCP_ENABLED="$(yq "${SEL} | .dhcp_options.enabled"             "${NET_YAML}")"
+DHCP_DOMAIN="$(yq  "${SEL} | .dhcp_options.domain_name"         "${NET_YAML}")"
+DHCP_PROVIDER="$(yq "${SEL} | .dhcp_options.provider"           "${NET_YAML}")"
 
 # Build domain_name_servers as HCL list: ["1.1.1.1", "1.0.0.1"]
-DNS_COUNT="$(yq "${SEL} | .dchp_options.domain_name_servers | length" "${NET_YAML}")"
+DNS_COUNT="$(yq "${SEL} | .dhcp_options.domain_name_servers | length" "${NET_YAML}")"
 DHCP_DNS_HCL="["
 for i in $(seq 0 1 $((DNS_COUNT - 1))); do
-  DNS="$(yq "${SEL} | .dchp_options.domain_name_servers[${i}]" "${NET_YAML}")"
+  DNS="$(yq "${SEL} | .dhcp_options.domain_name_servers[${i}]" "${NET_YAML}")"
   [[ $i -gt 0 ]] && DHCP_DNS_HCL+=", "
   DHCP_DNS_HCL+="\"${DNS}\""
 done

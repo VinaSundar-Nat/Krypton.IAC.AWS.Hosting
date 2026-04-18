@@ -59,12 +59,13 @@ data "aws_subnets" "existing" {
 resource "aws_subnet" "kr_subnet" {
   for_each = (
     var.enabled && length(var.subnets) > 0
-      ? local.subnets_map
+      ? {
+          for k, v in local.subnets_map : k => v
+          if length(data.aws_subnets.existing[v.subnet_name].ids) == 0
+        }
       : {}
   )
 
-  # Skip creation if this subnet name already exists in the VPC (regardless of AZ)
-  count = length(data.aws_subnets.existing[each.value.subnet_name].ids) == 0 ? 1 : 0
 
   vpc_id            = var.vpc_id
   availability_zone = each.value.az
@@ -97,9 +98,9 @@ resource "aws_subnet" "kr_subnet" {
 
 # ── Data source to fetch created subnets ───────────────────────────────────────
 data "aws_subnet" "created" {
-  for_each = aws_subnet.main
+  for_each = aws_subnet.kr_subnet
 
-  id = each.value[0].id
+  id = each.value.id
 
-  depends_on = [aws_subnet.main]
+  depends_on = [aws_subnet.kr_subnet]
 }
