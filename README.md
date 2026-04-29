@@ -2,6 +2,59 @@
 
 AWS Infrastructure-as-Code hosting platform using Terraform and IAM Roles Anywhere for keyless On-prem authentication and GHA STS OIDC provider for execution via Github actions pipelines.
 
+## Architecture Overview
+
+This platform organises AWS network resources into named **zones** — logical tiers that map to distinct security boundaries. Each zone is expressed as a combination of VPC, subnets, route tables, NAT/IGW, security groups, and NACLs, and is encoded in resource names using a zone-suffix convention.
+
+### Zone Model
+
+| Zone Suffix | Tier | Visibility | Example Resource |
+|---|---|---|---|
+| `ect` | Web / Edge | Public (internet-reachable) | `kr-carevo-dev-public-subnet-ect`, `kr-web-ect-sg` |
+| `ict` | App / Controller | Private (no direct internet) | `kr-carevo-dev-private-subnet-ict`, `kr-app-ict-sg` |
+| `rst` | Downstream API / Data | Private (isolated, restricted) | `kr-carevo-dev-private-subnet-rst`, `kr-app-rst-sg` |
+
+### Network Boundary Components
+
+| Component | Role |
+|---|---|
+| **VPC** | Hard boundary for all resources; single CIDR block (e.g., `10.10.0.0/16`) per program |
+| **Subnets** | One subnet per zone per availability zone; public subnets mapped to IGW, private subnets to NAT |
+| **Internet Gateway (IGW)** | Attached to the VPC; the public route table points `0.0.0.0/0` here — enables inbound internet access for the `ect` zone |
+| **NAT Gateway** | Deployed in the public subnet; private route tables point `0.0.0.0/0` here — provides outbound-only internet egress for `ict` and `rst` zones |
+| **Route Tables** | One per zone tier; control which gateway handles outbound `0.0.0.0/0` traffic (IGW for public, NAT for private) |
+| **Security Groups (SG)** | Stateful, per-resource east-west firewall rules; each zone carries a named SG scoped by tier and zone suffix |
+| **NACLs** | Stateless subnet-level guardrail applied per subnet tier as a coarse perimeter filter before SG evaluation |
+
+### Traffic Flow
+
+```
+Internet (0.0.0.0/0)
+  │  Ingress: Ports 443 / 80
+  ▼
+[ Internet Gateway (IGW) ]
+  │
+  ▼
+[ kr-carevo-dev-public-subnet-ect ]  ←──────────────────────────┐
+  kr-web-ect-sg  (EC2 / ECS / ALB — web tier)                   │
+  │  Ingress: Port 8080 via SG reference                        NAT Gateway
+  ▼                                                              │  Egress (outbound only)
+[ kr-carevo-dev-private-subnet-ict ]                            │
+  kr-app-ict-sg  (orchestrator / controller apps)               │
+  │  Port 443 egress ──────────────────────────────────────────►┘
+  │  Ingress: Port 8080 via SG reference
+  ▼
+[ kr-carevo-dev-private-subnet-rst ]
+  kr-app-rst-sg  (downstream APIs — no direct reach)
+  Egress: Port 443 → 0.0.0.0/0 via NAT  (external APIs / updates)
+```
+
+- **`ect` zone** — public subnet; receives inbound traffic on ports 443/80 from the internet through the IGW; `kr-web-ect-sg` permits only those ports inbound from `0.0.0.0/0`.
+- **`ict` zone** — private subnet; reachable only from `kr-web-ect-sg` on port 8080 via SG reference (no public route); outbound internet egress via NAT Gateway on port 443 for AWS API calls and updates.
+- **`rst` zone** — private isolated subnet; reachable only from `kr-app-ict-sg` on port 8080 via SG reference; no inbound internet path; outbound egress via NAT on port 443 for external API calls and package updates.
+
+![](.docs/Network.png)
+
 ---
 
 Self Hosted - pipeline setup 
@@ -346,7 +399,7 @@ organisation:
         organisation: "krypton"
 ```
 
-### `environment/<ENV>/security/network.yaml`
+### `environment/<ENV>/platform/network.yaml`
 
 Defines VPC topology, subnetting, and networking for a specific environment. Each component is identified by its `sid` (matching the value in `org.yml`). Configure:
 
@@ -357,7 +410,7 @@ Defines VPC topology, subnetting, and networking for a specific environment. Eac
 - **Internet Gateway** — enable for public-facing resources
 - **Route Tables** — destination routes and associated targets (IGW, NAT, VPC peering)
 
-**Example structure for `environment/dev/security/network.yaml`:**
+**Example structure for `environment/dev/platform/network.yaml`:**
 
 ```yaml
 component:
@@ -400,6 +453,44 @@ component:
 The VPC architecture and resource relationships are shown below:
 
 ![](.docs/kr_vpc_aws.png)
+
+### `environment/<ENV>/platform/rules.yaml`
+
+Defines security group rules and network ACLs (NACLs) for a specific environment. Security groups enforce stateful **east-west** rules between zone tiers and to the internet; NACLs provide a coarse stateless perimeter filter at the subnet level.
+
+#### Security Groups
+
+Three security groups are created per zone tier, with rules linking them across zones:
+
+| Group ID | Group Name | Rule Type | Protocol | Port(s) | Source / Destination | Description |
+|---|---|---|---|---|---|---|
+| `sg-05d5e72a0f6de67d1` | `kr-carevo-dev-web-ect-sg` | **Inbound** | TCP | 80 | `0.0.0.0/0` | Allow HTTP from internet |
+| `sg-05d5e72a0f6de67d1` | `kr-carevo-dev-web-ect-sg` | **Inbound** | TCP | 443 | `0.0.0.0/0` | Allow HTTPS from internet |
+| `sg-05d5e72a0f6de67d1` | `kr-carevo-dev-web-ect-sg` | **Outbound** | TCP | 8080 | `sg-01ba14103dbe3a618` | Allow app port to internal SG (`kr-app-ict`) |
+| `sg-01ba14103dbe3a618` | `kr-carevo-dev-app-ict-sg` | **Inbound** | TCP | 8080 | `sg-05d5e72a0f6de67d1` | Allow app port from web SG (`kr-web-ect`) |
+| `sg-01ba14103dbe3a618` | `kr-carevo-dev-app-ict-sg` | **Outbound** | TCP | 8080 | `sg-0dd41105f551354cf` | Allow app port to restricted SG (`kr-app-rst`) |
+| `sg-0dd41105f551354cf` | `kr-carevo-dev-app-rst-sg` | **Inbound** | TCP | 8080 | `sg-01ba14103dbe3a618` | Allow app port from internal SG (`kr-app-ict`) |
+| `sg-0dd41105f551354cf` | `kr-carevo-dev-app-rst-sg` | **Outbound** | TCP | 443 | `0.0.0.0/0` | Allow HTTPS to external services |
+
+**Configuration source:** `environment/dev/platform/rules.yaml` → `security_group` section with zone-tier SGs (`kr-web-ect`, `kr-app-ict`, `kr-app-rst`) and rule links between zones.
+
+> **Post-Deployment Note:** The `kr-app-ict` security group includes an additional **443 egress rule** to `0.0.0.0/0` (not shown in the configuration above) added post-deployment to allow the internal tier to reach external HTTPS services and AWS APIs. This rule mirrors the `kr-app-rst` egress behavior.
+
+#### Network ACLs
+
+NACLs provide a stateless subnet-level perimeter filter applied before security group rules:
+
+**Public Subnet NACL:**
+- **Inbound:** Allow TCP 443/80 from `0.0.0.0/0`; allow ephemeral TCP 1024–65535 for return traffic
+- **Outbound:** Allow all traffic (`0.0.0.0/0`)
+
+**Private Subnet NACL:**
+- **Inbound:** Allow TCP 443 and ephemeral TCP 1024–65535 from VPC CIDR (`10.10.0.0/16`); deny all else
+- **Outbound:** Allow all traffic (`0.0.0.0/0`)
+
+#### Zone Security Group Architecture
+
+![](.docs/security_group_zones.png)
 
 ---
 
@@ -452,7 +543,7 @@ Execute infrastructure changes on your local machine using keyless authenticatio
 2. **Generates Terraform variables** — calls `scripts/replace-vars.sh <SID> <ENV>` to parse `org.yml` and `environment/<ENV>/security/network.yaml`, then writes:
    - `core/terraform.tfvars` (org, program, environment tags)
    - `core/variables/network.auto.tfvars` (VPC, subnet, NAT config)
-   - `core/variables/security.auto.tfvars` (security group and NACL rules)
+   - `core/variables/rules.auto.tfvars` (security group and NACL rules)
 3. **Sets up AWS credentials** — writes an AWS CLI named profile that uses `aws_signing_helper` to exchange your X.509 certificate for temporary STS credentials automatically
 4. **Executes Terraform** — runs `terraform init` and your requested command (plan/apply/destroy) from the `core/` directory
 

@@ -200,9 +200,10 @@ copilot-instructions.*
 
 .terraform
 core/network.tf
-core/security.tf
+core/rules.tf
 core/.terraform.lock.hcl
 core/terraform.tfstate
+core/terraform.tfstate.backup
 core/backend.tf
 
 *.backup

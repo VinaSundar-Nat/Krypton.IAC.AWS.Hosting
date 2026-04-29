@@ -204,3 +204,22 @@ module "deploy-kr-route-tables" {
     module.deploy-kr-nat-gateway,
   ]
 }
+
+# =============================================================================
+# Security Group Module – creates security groups and ingress/egress rules
+# from zone definitions and rule-link declarations in rules.auto.tfvars.
+# =============================================================================
+module "deploy-kr-security-groups" {
+  source = "./module/rules/sg"
+
+  vpc_id                   = module.deploy-kr-vpc.kr_vpc_id
+  security_groups_zone     = var.security_groups_zone
+  security_group_rule_link = var.security_group_rule_link
+  security_group_rules     = var.security_group_rules
+
+  common_tags = {
+    Team         = "Carevo DevOps Network Security"
+  }
+
+  depends_on = [module.deploy-kr-vpc]
+}

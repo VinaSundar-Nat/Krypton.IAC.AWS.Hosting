@@ -14,7 +14,7 @@
 # Outputs:
 #   core/terraform.tfvars                    → organisation, program, environment tags
 #   core/variables/network.auto.tfvars       → via network-vars.sh
-#   core/variables/security.auto.tfvars      → via rules-vars.sh
+#   core/variables/rules.auto.tfvars         → via rules-vars.sh
 #
 # Usage:
 #   ./scripts/configuration/replace-vars.sh kr-carevo dev
@@ -114,7 +114,7 @@ echo "Written: ${TFVARS}"
 source "${SCRIPT_DIR}/network-vars.sh"
 
 # =============================================================================
-# security.auto.tfvars — delegated to rules-vars.sh
+# rules.auto.tfvars — delegated to rules-vars.sh
 # =============================================================================
 # shellcheck source=./rules-vars.sh
 source "${SCRIPT_DIR}/rules-vars.sh"

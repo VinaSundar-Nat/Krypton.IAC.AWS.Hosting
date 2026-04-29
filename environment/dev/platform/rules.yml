@@ -1,89 +1,165 @@
 # =============================================================================
 # rules.yaml
 # Security group and NACL rules for the dev environment.
-# Consumed by scripts/replace-vars.sh → core/variables/security.auto.tfvars
+# Consumed by scripts/replace-vars.sh → core/variables/rules.auto.tfvars
 # =============================================================================
 
-security_groups:
-  ingress:
-    - description: "HTTPS from VPC"
-      protocol: tcp
-      from_port: 443
-      to_port: 443
-      cidr_blocks:
-        - "10.10.0.0/16"
-    - description: "HTTP from VPC"
-      protocol: tcp
-      from_port: 80
-      to_port: 80
-      cidr_blocks:
-        - "10.10.0.0/16"
-    - description: "App port from private subnets"
-      protocol: tcp
-      from_port: 8080
-      to_port: 8080
-      cidr_blocks:
-        - "10.10.10.0/24"
-  egress:
-    - description: "Allow all outbound"
-      protocol: "-1"
-      from_port: 0
-      to_port: 0
-      cidr_blocks:
-        - "0.0.0.0/0"
-
-nacl:
-  private:
-    inbound:
-      - rule_number: 100
-        protocol: tcp
-        action: allow
-        cidr_block: "10.10.0.0/16"
-        from_port: 443
-        to_port: 443
-      - rule_number: 200
-        protocol: tcp
-        action: allow
-        cidr_block: "10.10.0.0/16"
-        from_port: 1024
-        to_port: 65535
-      - rule_number: 900
-        protocol: "-1"
-        action: deny
-        cidr_block: "0.0.0.0/0"
-        from_port: 0
-        to_port: 0
-    outbound:
-      - rule_number: 100
-        protocol: "-1"
-        action: allow
-        cidr_block: "0.0.0.0/0"
-        from_port: 0
-        to_port: 0
-  public:
-    inbound:
-      - rule_number: 100
-        protocol: tcp
-        action: allow
-        cidr_block: "0.0.0.0/0"
-        from_port: 443
-        to_port: 443
-      - rule_number: 110
-        protocol: tcp
-        action: allow
-        cidr_block: "0.0.0.0/0"
-        from_port: 80
-        to_port: 80
-      - rule_number: 200
-        protocol: tcp
-        action: allow
-        cidr_block: "0.0.0.0/0"
-        from_port: 1024
-        to_port: 65535
-    outbound:
-      - rule_number: 100
-        protocol: "-1"
-        action: allow
-        cidr_block: "0.0.0.0/0"
-        from_port: 0
-        to_port: 0
+component:
+  - sid: "kr-carevo"
+    security_group:
+      security_groups_zone:
+        - name: "kr-carevo-dev-app-rst-sg"
+          id : "kr-app-rst"
+          enabled : true
+          description: "Restricted Security group for carevo dev environment - No external access, only from within VPC and private subnets"
+        - name: "kr-carevo-dev-web-ect-sg"
+          id : "kr-web-ect"
+          enabled : true
+          description: "External Security group for carevo dev environment - Allows HTTP/HTTPS from VPC and app port from private subnets"
+        - name: "kr-carevo-dev-app-ict-sg"
+          id : "kr-app-ict"
+          enabled : true
+          description: "Internal Security group for carevo dev environment - Allows controlled internal access and from VPC and private subnets"
+      security_group_rule_link:
+        - source: "kr-web-ect"
+          target: ""          
+          rules: 
+           in001 :
+            cidr_blocks: "0.0.0.0/0"
+           in002 :
+            cidr_blocks: "0.0.0.0/0"
+          description: "Allow HTTP/HTTPS internet to web SG" 
+        - source: "kr-web-ect"
+          target: "kr-app-ict"
+          rules: 
+           eg003 : 
+            cidr_blocks: ""
+          description: "Allow internal app port from web SG to internal SG"
+        - source: "kr-app-ict"
+          target: "kr-web-ect"
+          rules: 
+           in003 : 
+            cidr_blocks: ""
+          description: "Allow internal app port from web SG to internal SG"
+        - source: "kr-app-ict"
+          target: "kr-app-rst"
+          rules:
+            eg003:
+              cidr_blocks: ""
+          description: "Allow app port from internal SG to app SG"
+        - source: "kr-app-rst"
+          target: "kr-app-ict"
+          rules:
+            in003 : 
+              cidr_blocks: ""
+          description: "Allow app port from internal SG to restricted app SG"
+        - source: "kr-app-rst"
+          target: ""
+          rules:
+            eg001 :
+              cidr_blocks: "0.0.0.0/0" 
+          description: "Allow https port from restricted SG to services"
+        - source: "kr-app-ict"
+          target: ""
+          rules:
+            eg001 :
+              cidr_blocks: "0.0.0.0/0" 
+          description: "Allow https port from internal SG to services"
+      rules:
+        - description: "HTTPS ingress"
+          id: "in001"
+          protocol: tcp
+          from_port: 443
+          to_port: 443
+          type: "ingress"
+        - description: "HTTPS egress"
+          id: "eg001"
+          protocol: tcp
+          from_port: 443
+          to_port: 443
+          type: "egress"
+        - description: "HTTP ingress"
+          id: "in002"
+          protocol: tcp
+          from_port: 80
+          to_port: 80
+          type: "ingress"
+        - description: "HTTP egress"
+          id: "eg002"
+          protocol: tcp
+          from_port: 80
+          to_port: 80
+          type: "egress"
+        - description: "App port ingress"
+          id: "in003"
+          protocol: tcp
+          from_port: 8080
+          to_port: 8080
+          type: "ingress"
+        - description: "App port egress"
+          id: "eg003"
+          protocol: tcp
+          from_port: 8080
+          to_port: 8080
+          type: "egress"
+        - description: "Allow all outbound"
+          id: "eg004"
+          protocol: "-1"
+          from_port: 0
+          to_port: 0
+          type: "egress"
+    nacl:
+      private:
+        inbound:
+          - rule_number: 100
+            protocol: tcp
+            action: allow
+            cidr_block: "10.10.0.0/16"
+            from_port: 443
+            to_port: 443
+          - rule_number: 200
+            protocol: tcp
+            action: allow
+            cidr_block: "10.10.0.0/16"
+            from_port: 1024
+            to_port: 65535
+          - rule_number: 900
+            protocol: "-1"
+            action: deny
+            cidr_block: "0.0.0.0/0"
+            from_port: 0
+            to_port: 0
+        outbound:
+          - rule_number: 100
+            protocol: "-1"
+            action: allow
+            cidr_block: "0.0.0.0/0"
+            from_port: 0
+            to_port: 0
+      public:
+        inbound:
+          - rule_number: 100
+            protocol: tcp
+            action: allow
+            cidr_block: "0.0.0.0/0"
+            from_port: 443
+            to_port: 443
+          - rule_number: 110
+            protocol: tcp
+            action: allow
+            cidr_block: "0.0.0.0/0"
+            from_port: 80
+            to_port: 80
+          - rule_number: 200
+            protocol: tcp
+            action: allow
+            cidr_block: "0.0.0.0/0"
+            from_port: 1024
+            to_port: 65535
+        outbound:
+          - rule_number: 100
+            protocol: "-1"
+            action: allow
+            cidr_block: "0.0.0.0/0"
+            from_port: 0
+            to_port: 0
