@@ -8,11 +8,11 @@ This platform organises AWS network resources into named **zones** — logical t
 
 ### Zone Model
 
-| Zone Suffix | Tier | Visibility | Example Resource |
-|---|---|---|---|
-| `ect` | Web / Edge | Public (internet-reachable) | `kr-carevo-dev-public-subnet-ect`, `kr-web-ect-sg` |
-| `ict` | App / Controller | Private (no direct internet) | `kr-carevo-dev-private-subnet-ict`, `kr-app-ict-sg` |
-| `rst` | Downstream API / Data | Private (isolated, restricted) | `kr-carevo-dev-private-subnet-rst`, `kr-app-rst-sg` |
+| Zone Suffix | Tier | Components | Visibility | Example Resource |
+|---|---|---|---|---|
+| `ect` | Web / Edge | internet facing Web | Public (internet-reachable) | `kr-carevo-dev-public-subnet-ect`, `kr-web-ect-sg` |
+| `ict` | App / Controller | Orchestrator's , Controllers , Agent Farms , Experience API. | Private (no direct internet) | `kr-carevo-dev-private-subnet-ict`, `kr-app-ict-sg` |
+| `rst` | Downstream API / Data | Domain API'S , SOR API's, MCP Servers , Agent Farms | Private (isolated, restricted) | `kr-carevo-dev-private-subnet-rst`, `kr-app-rst-sg` |
 
 ### Network Boundary Components
 
@@ -26,28 +26,6 @@ This platform organises AWS network resources into named **zones** — logical t
 | **Security Groups (SG)** | Stateful, per-resource east-west firewall rules; each zone carries a named SG scoped by tier and zone suffix |
 | **NACLs** | Stateless subnet-level guardrail applied per subnet tier as a coarse perimeter filter before SG evaluation |
 
-### Traffic Flow
-
-```
-Internet (0.0.0.0/0)
-  │  Ingress: Ports 443 / 80
-  ▼
-[ Internet Gateway (IGW) ]
-  │
-  ▼
-[ kr-carevo-dev-public-subnet-ect ]  ←──────────────────────────┐
-  kr-web-ect-sg  (EC2 / ECS / ALB — web tier)                   │
-  │  Ingress: Port 8080 via SG reference                        NAT Gateway
-  ▼                                                              │  Egress (outbound only)
-[ kr-carevo-dev-private-subnet-ict ]                            │
-  kr-app-ict-sg  (orchestrator / controller apps)               │
-  │  Port 443 egress ──────────────────────────────────────────►┘
-  │  Ingress: Port 8080 via SG reference
-  ▼
-[ kr-carevo-dev-private-subnet-rst ]
-  kr-app-rst-sg  (downstream APIs — no direct reach)
-  Egress: Port 443 → 0.0.0.0/0 via NAT  (external APIs / updates)
-```
 
 - **`ect` zone** — public subnet; receives inbound traffic on ports 443/80 from the internet through the IGW; `kr-web-ect-sg` permits only those ports inbound from `0.0.0.0/0`.
 - **`ict` zone** — private subnet; reachable only from `kr-web-ect-sg` on port 8080 via SG reference (no public route); outbound internet egress via NAT Gateway on port 443 for AWS API calls and updates.
