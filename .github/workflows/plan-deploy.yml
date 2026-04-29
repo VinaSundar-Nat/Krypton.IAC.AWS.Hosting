@@ -70,11 +70,11 @@ jobs:
             scripts/configuration/rules-vars.sh
           scripts/install-deps.sh
           scripts/configuration/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
-          # core/network.tf and core/security.tf are gitignored symlinks created
+          # core/network.tf and core/rules.tf are gitignored symlinks created
           # locally by runner.sh.  Recreate them here so Terraform's root module
           # has the variable declarations it needs.
           ln -sf variables/network.tf core/network.tf
-          ln -sf variables/security.tf core/security.tf
+          ln -sf variables/rules.tf core/rules.tf
 
       # ── Step 3: AWS authentication via GitHub STS OIDC ──────────────────────
       - name: Fetch GitHub OIDC token
@@ -106,7 +106,7 @@ jobs:
             -var='auth_mode=gha' \
             -var="gha_role_arn=${{ secrets.GHA_ROLE_ARN }}" \
             -var-file=variables/network.auto.tfvars \
-            -var-file=variables/security.auto.tfvars \
+            -var-file=variables/rules.auto.tfvars \
             -out="${PLAN_FILE}" \
             -lock=false \
             -detailed-exitcode 2>&1 | tee /tmp/plan.log
@@ -172,11 +172,11 @@ jobs:
             scripts/configuration/rules-vars.sh
           scripts/install-deps.sh
           scripts/configuration/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
-          # core/network.tf and core/security.tf are gitignored symlinks created
+          # core/network.tf and core/rules.tf are gitignored symlinks created
           # locally by runner.sh.  Recreate them here so Terraform's root module
           # has the variable declarations it needs.
           ln -sf variables/network.tf core/network.tf
-          ln -sf variables/security.tf core/security.tf
+          ln -sf variables/rules.tf core/rules.tf
 
       # OIDC tokens are short-lived and not shared between jobs; re-fetch here
       - name: Fetch GitHub OIDC token
