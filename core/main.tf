@@ -223,3 +223,27 @@ module "deploy-kr-security-groups" {
 
   depends_on = [module.deploy-kr-vpc]
 }
+
+# =============================================================================
+# NACL Module – creates Network ACLs and their ingress/egress rules from zone
+# definitions and rule-link declarations in rules.auto.tfvars.
+# Subnet IDs are resolved from subnet_details by matching subnet names.
+# =============================================================================
+module "deploy-kr-nacls" {
+  source = "./module/rules/nacl"
+
+  vpc_id         = module.deploy-kr-vpc.kr_vpc_id
+  nacl_zone      = var.nacl_zone
+  nacl_rule_link = var.nacl_rule_link
+  nacl_rules     = var.nacl_rules
+  subnet_details = module.deploy-kr-subnets.subnet_details
+
+  common_tags = {
+    Team = "Carevo DevOps Network Security"
+  }
+
+  depends_on = [
+    module.deploy-kr-vpc,
+    module.deploy-kr-subnets,
+  ]
+}

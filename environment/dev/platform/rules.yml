@@ -109,57 +109,178 @@ component:
           to_port: 0
           type: "egress"
     nacl:
-      private:
-        inbound:
-          - rule_number: 100
-            protocol: tcp
-            action: allow
-            cidr_block: "10.10.0.0/16"
-            from_port: 443
-            to_port: 443
-          - rule_number: 200
-            protocol: tcp
-            action: allow
-            cidr_block: "10.10.0.0/16"
-            from_port: 1024
-            to_port: 65535
-          - rule_number: 900
-            protocol: "-1"
-            action: deny
-            cidr_block: "0.0.0.0/0"
-            from_port: 0
-            to_port: 0
-        outbound:
-          - rule_number: 100
-            protocol: "-1"
-            action: allow
-            cidr_block: "0.0.0.0/0"
-            from_port: 0
-            to_port: 0
-      public:
-        inbound:
-          - rule_number: 100
-            protocol: tcp
-            action: allow
-            cidr_block: "0.0.0.0/0"
-            from_port: 443
-            to_port: 443
-          - rule_number: 110
-            protocol: tcp
-            action: allow
-            cidr_block: "0.0.0.0/0"
-            from_port: 80
-            to_port: 80
-          - rule_number: 200
-            protocol: tcp
-            action: allow
-            cidr_block: "0.0.0.0/0"
-            from_port: 1024
-            to_port: 65535
-        outbound:
-          - rule_number: 100
-            protocol: "-1"
-            action: allow
-            cidr_block: "0.0.0.0/0"
-            from_port: 0
-            to_port: 0
+      nacl_zone:
+       - name: "kr-carevo-dev-rst-nacl"
+         id: "kr-rst-nacl"
+         enabled : true
+         description: "NACL for carevo dev environment - Restrictive private rules for app subnets"
+         subnets: ["kr-carevo-dev-rst-nacl"]
+       - name: "kr-carevo-dev-ect-nacl"
+         id: "kr-ect-nacl"
+         enabled : true
+         description: "NACL for carevo dev environment - Moderate public rules for web subnets"
+         subnets: ["kr-carevo-dev-ect-nacl"]
+       - name: "kr-carevo-dev-ict-nacl"
+         id: "kr-ict-nacl"
+         enabled : true
+         description: "NACL for carevo dev environment - Moderate private rules for internal subnets"
+         subnets: ["kr-carevo-dev-ict-nacl"]
+      rules_link:
+        - nacl: "kr-ect-nacl"
+          rules:
+            - in001 :
+              rule_number: 100
+              description: "Allow public HTTPS from 443"
+              cidr_block: "0.0.0.0/0"
+              subnet: ""
+              action: "allow"
+            - in002 :
+              rule_number: 110
+              description: "Allow public HTTP from 80"
+              cidr_block: "0.0.0.0/0"
+              subnet: ""
+              action: "allow"
+            - in006 :
+              rule_number: 130
+              description: "Default deny all other traffic"
+              cidr_block: "0.0.0.0/0"
+              subnet: ""
+              action: "deny"
+            - eg003 :
+              rule_number: 150
+              description: "allow response traffic"
+              cidr_block: "0.0.0.0/0"
+              subnet: ""
+              action: "allow"
+            - eg005 :
+              rule_number: 160
+              description: "outbound to app port"
+              cidr_block: ""
+              subnet: "kr-carevo-dev-ict-nacl"
+              action: "allow"
+        - nacl: "kr-ict-nacl"
+          rules:
+            - in005 :
+              rule_number: 100
+              description: "Allow app port ingress"
+              cidr_block: ""
+              subnet: "kr-carevo-dev-ect-nacl"
+              action: "allow"
+            - in001 :
+              rule_number: 110
+              description: "Allow HTTPS from web subnets"
+              cidr_block: ""
+              subnet: "kr-carevo-dev-ect-nacl"
+              action: "allow"
+            - in006 :
+              rule_number: 130
+              description: "Default deny all other traffic"
+              cidr_block: "0.0.0.0/0"
+              subnet: ""
+              action: "deny"            
+            - eg003 :
+              rule_number: 150
+              description: "allow response traffic"
+              cidr_block: ""
+              subnet: "kr-carevo-dev-ect-nacl"
+              action: "allow"
+            - eg005 :
+              rule_number: 160
+              description: "outbound to app port"
+              cidr_block: ""
+              subnet: "kr-carevo-dev-rst-nacl"
+              action: "allow"
+        - nacl: "kr-rst-nacl"
+          rules:
+            - in005 :
+              rule_number: 100
+              description: "Allow app port ingress"
+              cidr_block: ""
+              subnet: "kr-carevo-dev-ect-nacl"
+              action: "allow"
+            - in001 :
+              rule_number: 110
+              description: "Allow HTTPS from web subnets"
+              cidr_block: ""
+              subnet: "kr-carevo-dev-ect-nacl"
+              action: "allow"
+            - in006 :
+              rule_number: 130
+              description: "Default deny all other traffic"
+              cidr_block: "0.0.0.0/0"
+              subnet: ""
+              action: "deny"            
+            - eg003 :
+              rule_number: 150
+              description: "allow response traffic"
+              cidr_block: ""
+              subnet: "kr-carevo-dev-ect-nacl"
+              action: "allow"
+            - eg005 :
+              rule_number: 160
+              description: "outbound to app port"
+              cidr_block: ""
+              subnet: "kr-carevo-dev-rst-nacl"
+              action: "allow"
+                   
+      rules:
+        - description: "HTTPS ingress"
+          id: "in001"
+          protocol: tcp
+          from_port: 443
+          to_port: 443
+          type: "ingress"
+        - description: "HTTP ingress"
+          id: "in002"
+          protocol: tcp
+          from_port: 80
+          to_port: 80
+          type: "ingress"
+        - description: "Ephemeral port request traffic"
+          id: "in003"
+          protocol: tcp
+          from_port: 1024
+          to_port: 65535
+          type: "ingress"   
+        - description: "App port ingress"
+          id: "in005"
+          protocol: tcp
+          from_port: 8080
+          to_port: 8080
+          type: "ingress"
+        - description: "Default deny all ingress"
+          id: "in006"
+          protocol: -1
+          from_port: 0
+          to_port: 0
+          type: "ingress"
+        - description: "HTTPS egress"
+          id: "eg001"
+          protocol: tcp
+          from_port: 443
+          to_port: 443
+          type: "egress"
+        - description: "HTTP egress"
+          id: "eg002"
+          protocol: tcp
+          from_port: 80
+          to_port: 80
+          type: "egress"
+        - description: "Ephemeral port response traffic"
+          id: "eg003"
+          protocol: tcp
+          from_port: 1024
+          to_port: 65535
+          type: "egress"
+        - description: "App port egress"
+          id: "eg005"
+          protocol: tcp
+          from_port: 8080
+          to_port: 8080
+          type: "egress"
+         
+
+        
+        
+        
+        

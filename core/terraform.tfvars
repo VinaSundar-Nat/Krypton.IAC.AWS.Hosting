@@ -11,7 +11,7 @@
 # DO NOT set auth_mode here — export TF_VAR_auth_mode=gha|local at the shell.
 # =============================================================================
 
-aws_region = "REPLACE_REGION"
+aws_region = "us-east-1"
 # auth_mode is intentionally omitted — supply via TF_VAR_auth_mode env var
 # or -var 'auth_mode=...' flag.  See runner.sh (local) and plan-deploy.yml (gha).
 
@@ -24,6 +24,6 @@ web_identity_token_file = "/tmp/web-identity-token"
 # ARNs live in scripts/vars.sh — only the named profile is needed here.
 aws_profile               = "krypton-ta"
 
-organisation = "REPLACE_ORGANISATION"
-program      = "REPLACE_PROGRAM"
-environment  = "REPLACE_ENVIRONMENT"
+organisation = "krypton"
+program      = "carevo"
+environment  = "dev"
