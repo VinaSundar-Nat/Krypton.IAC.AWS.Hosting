@@ -35,6 +35,134 @@ This platform organises AWS network resources into named **zones** — logical t
 
 ---
 
+## Network ACL (NACL) Architecture
+
+Network ACLs provide a stateless, subnet-level perimeter filter that works in conjunction with Security Groups to enforce traffic control across the three-layer zone architecture. Unlike Security Groups, NACLs operate at the subnet boundary and require explicit rules for both inbound and outbound traffic, including response traffic via ephemeral ports.
+
+### Zone Registration and Subnet Mapping
+
+Each logical zone tier is protected by a dedicated NACL that is registered to one or more subnets. The zone-to-NACL mapping is:
+
+| Zone | NACL Name | Protected Subnet(s) | Visibility |
+|---|---|---|---|
+| **ECT** (Edge/Web) | `kr-carevo-dev-ect-nacl` | `kr-carevo-dev-public-subnet-ect` | Public |
+| **ICT** (App/Controller) | `kr-carevo-dev-ict-nacl` | `kr-carevo-dev-private-subnet-ict` | Private |
+| **RST** (Data/API) | `kr-carevo-dev-rst-nacl` | `kr-carevo-dev-private-subnet-rst` | Private |
+
+Each NACL is bound to its corresponding subnet(s) and acts as the first line of defense before the Security Group rules are evaluated on individual resources within that subnet.
+
+### Traffic Flow: ECT → ICT → RST
+
+The three-layer architecture enforces a unidirectional information flow with NACLs acting as stateless checkpoints at each layer:
+
+![](.docs/nacl_zones.png)
+
+#### 1. **ECT Zone (Edge/Web) — Public Entry Point**
+- **Ingress**: Port 443 (HTTPS) and 80 (HTTP) from `0.0.0.0/0` (internet-facing)
+- **Egress**: 
+  - Port 8080 to `kr-carevo-dev-private-subnet-ict` (internal app communication)
+  - Ephemeral ports (1024–65535) for response traffic from external services
+
+**NACL Rules:**
+```
+Inbound:
+  Rule 100: Allow HTTPS (port 443) from 0.0.0.0/0
+  Rule 110: Allow HTTP (port 80) from 0.0.0.0/0
+  Rule 130: Deny all other traffic
+
+Outbound:
+  Rule 150: Allow response traffic (ephemeral: 1024–65535) to 0.0.0.0/0
+  Rule 160: Allow app port (8080) to ICT subnet
+```
+
+#### 2. **ICT Zone (App/Controller) — Private Orchestration**
+- **Ingress**:
+  - Port 8080 from `kr-carevo-dev-public-subnet-ect` (web requests)
+  - Port 443 (HTTPS) from `kr-carevo-dev-public-subnet-ect` (API calls from web layer)
+- **Egress**:
+  - Port 8080 to `kr-carevo-dev-private-subnet-rst` (downstream API calls)
+  - Port 443 (HTTPS) to `kr-carevo-dev-public-subnet-ect` (response traffic)
+  - Ephemeral ports (1024–65535) for responses from RST and external services
+
+**NACL Rules:**
+```
+Inbound:
+  Rule 100: Allow app port (8080) from ECT subnet
+  Rule 110: Allow HTTPS (port 443) from ECT subnet
+  Rule 130: Deny all other traffic
+
+Outbound:
+  Rule 150: Allow response traffic (ephemeral: 1024–65535) to ECT subnet
+  Rule 160: Allow app port (8080) to RST subnet
+```
+
+#### 3. **RST Zone (Data/API) — Private Data Layer**
+- **Ingress**:
+  - Port 8080 from `kr-carevo-dev-private-subnet-ict` (internal app requests)
+  - Port 443 (HTTPS) from `kr-carevo-dev-private-subnet-ict` (secure API calls from orchestration layer)
+- **Egress**: Ephemeral ports (1024–65535) for responses back to ICT layer
+
+**NACL Rules:**
+```
+Inbound:
+  Rule 100: Allow app port (8080) from ICT subnet
+  Rule 110: Allow HTTPS (port 443) from ICT subnet
+  Rule 130: Deny all other traffic
+
+Outbound:
+  Rule 150: Allow response traffic (ephemeral: 1024–65535) to ICT subnet
+```
+
+### Ephemeral Ports and Response Traffic
+
+A key aspect of the NACL design is the use of **ephemeral ports** (also called dynamic or temporary ports) for handling response traffic. Since NACLs are stateless, outbound response traffic from a remote server cannot be matched back to the original request — it must be explicitly allowed.
+
+![](.docs/nacl_ect_outbound.png)
+
+#### Why Ephemeral Ports Matter
+
+When a client in the ECT zone initiates a connection to an external service on port 443 (HTTPS), the remote server's response comes back on a high-numbered port in the range **1024–65535** (the ephemeral port range, also called the dynamic port range). 
+
+**Example flow:**
+1. **Request (outbound)**: Client in ECT → `external-service:443` (port 443)
+2. **Response (inbound on ephemeral port)**: `external-service:52847` → Client in ECT (port 52847 is in ephemeral range)
+
+Since NACLs are stateless and don't track connection state like Security Groups do, the inbound response on the ephemeral port must be explicitly allowed by an ingress rule. Without this rule, responses would be dropped even though the outbound request was allowed.
+
+#### Ephemeral Port Range by Layer
+
+| Layer | Outbound Ephemeral Rule | Direction | Port Range | Purpose |
+|---|---|---|---|---|
+| **ECT** | `Rule 150: Allow TCP 1024–65535` | Ingress | 1024–65535 | Responses from internet-based services |
+| **ICT** | `Rule 150: Allow TCP 1024–65535` | Egress | 1024–65535 | Responses from RST layer |
+| **RST** | `Rule 150: Allow TCP 1024–65535` | Egress | 1024–65535 | Responses back to ICT orchestration |
+
+#### Practical Communication Examples
+
+**Web request flow (ECT → Internet → ECT):**
+```
+1. Client in ECT initiates HTTPS request to external API
+   Source: 10.10.1.100:51234 → Destination: 203.0.113.10:443
+   
+2. External server responds
+   Source: 203.0.113.10:443 → Destination: 10.10.1.100:51234 (ephemeral port)
+   
+3. ECT NACL Ingress Rule 150 matches and allows the response
+```
+
+**Internal API call (ICT → RST):**
+```
+1. App controller in ICT requests data from RST API
+   Source: 10.10.2.50:54321 → Destination: 10.10.3.100:8080
+   
+2. RST service responds
+   Source: 10.10.3.100:8080 → Destination: 10.10.2.50:54321 (ephemeral port)
+   
+3. ICT NACL Egress Rule 150 matches and allows the response
+```
+
+---
+
 Self Hosted - pipeline setup 
 Note : Cost for AWS Trust anchor - $0.10 per 100 credential requests
 
@@ -458,13 +586,6 @@ Three security groups are created per zone tier, with rules linking them across 
 
 NACLs provide a stateless subnet-level perimeter filter applied before security group rules:
 
-**Public Subnet NACL:**
-- **Inbound:** Allow TCP 443/80 from `0.0.0.0/0`; allow ephemeral TCP 1024–65535 for return traffic
-- **Outbound:** Allow all traffic (`0.0.0.0/0`)
-
-**Private Subnet NACL:**
-- **Inbound:** Allow TCP 443 and ephemeral TCP 1024–65535 from VPC CIDR (`10.10.0.0/16`); deny all else
-- **Outbound:** Allow all traffic (`0.0.0.0/0`)
 
 #### Zone Security Group Architecture
 
