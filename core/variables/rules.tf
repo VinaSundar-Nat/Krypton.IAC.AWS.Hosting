@@ -68,61 +68,63 @@ variable "security_group_rules" {
   default = []
 }
 
-# ── NACLs – private subnets ───────────────────────────────────────────────────
-variable "nacl_inbound_rules" {
+# ── NACL Zones ────────────────────────────────────────────────────────────────
+# Named NACLs per zone (e.g. rst-nacl, ect-nacl, ict-nacl).
+# Sourced from rules.yml component.nacl.nacl_zone[].
+variable "nacl_zone" {
   description = <<-EOT
-    Inbound NACL rules for private subnets (app, data, cache zones).
-    rule_number: evaluated lowest-first, must be unique.
-    action: allow | deny
-    protocol: tcp | udp | icmp | -1
+    List of NACL zone definitions sourced from rules.yml.
+    Each entry carries a logical name, short id, enabled flag, description, and subnet associations.
   EOT
   type = list(object({
-    rule_number = number
-    protocol    = string
-    action      = string
-    cidr_block  = string
-    from_port   = number
-    to_port     = number
+    name        = string
+    id          = string
+    enabled     = bool
+    description = string
+    subnets     = list(string)
   }))
   default = []
 }
 
-variable "nacl_outbound_rules" {
-  description = "Outbound NACL rules for private subnets."
+# ── NACL Rule Links ────────────────────────────────────────────────────────────
+# Associations between NACLs and their rules with per-rule overrides.
+# Sourced from rules.yml component.nacl.rules_link[].
+variable "nacl_rule_link" {
+  description = <<-EOT
+    List of NACL rule links associating NACL zones to ingress/egress rules.
+    nacl references the id field from nacl_zone.
+    rules is a list of rule associations with rule_number, description, cidr_block, subnet, and action.
+  EOT
   type = list(object({
-    rule_number = number
-    protocol    = string
-    action      = string
-    cidr_block  = string
-    from_port   = number
-    to_port     = number
+    nacl  = string
+    rules = list(map(object({
+      rule_number = number
+      description = string
+      cidr_block  = string
+      subnet      = string
+      action      = string
+    })))
   }))
   default = []
 }
 
-# ── NACLs – public subnets ────────────────────────────────────────────────────
-variable "nacl_public_inbound_rules" {
-  description = "Inbound NACL rules for public subnets (web zone)."
+# ── NACL Rules ────────────────────────────────────────────────────────────────
+# Reusable NACL rule definitions referenced by id in nacl_rule_links.
+# Sourced from rules.yml component.nacl.rules[].
+variable "nacl_rules" {
+  description = <<-EOT
+    Named NACL rule definitions applied via nacl_rule_links.
+    id: unique rule identifier
+    protocol: tcp | udp | icmp | -1 (all traffic)
+    type: ingress | egress
+  EOT
   type = list(object({
-    rule_number = number
+    id          = string
+    description = string
     protocol    = string
-    action      = string
-    cidr_block  = string
     from_port   = number
     to_port     = number
-  }))
-  default = []
-}
-
-variable "nacl_public_outbound_rules" {
-  description = "Outbound NACL rules for public subnets (web zone)."
-  type = list(object({
-    rule_number = number
-    protocol    = string
-    action      = string
-    cidr_block  = string
-    from_port   = number
-    to_port     = number
+    type        = string
   }))
   default = []
 }

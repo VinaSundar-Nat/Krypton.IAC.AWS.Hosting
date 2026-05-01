@@ -10,7 +10,7 @@ locals {
   subnets_by_az = flatten([
     for subnet in var.subnets : [
       for az_idx, az in subnet.availability_zone : {
-        subnet_name    = subnet.name
+        subnet_name    = "${subnet.name}"
         subnet_type    = subnet.type
         base_cidr      = subnet.cidr
         az             = az
