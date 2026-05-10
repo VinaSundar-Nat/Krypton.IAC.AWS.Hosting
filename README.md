@@ -10,8 +10,8 @@ This platform organises AWS network resources into named **zones** — logical t
 
 | Zone Suffix | Tier | Components | Visibility | Example Resource |
 |---|---|---|---|---|
-| `ect` | Web / Edge | internet facing Web | Public (internet-reachable) | `kr-carevo-dev-public-subnet-ect`, `kr-web-ect-sg` |
-| `ict` | App / Controller | Orchestrator's , Controllers , Agent Farms , Experience API. | Private (no direct internet) | `kr-carevo-dev-private-subnet-ict`, `kr-app-ict-sg` |
+| `ect` | Web / Edge | internet facing ELB  , IGW , NAT | Public (internet-reachable) | `kr-carevo-dev-public-subnet-ect`, `kr-web-ect-sg` |
+| `ict` | App / Controller | Orchestrator's , Controllers , Agent Farms , Experience API, web front ends | Private (no direct internet) | `kr-carevo-dev-private-subnet-ict`, `kr-app-ict-sg` |
 | `rst` | Downstream API / Data | Domain API'S , SOR API's, MCP Servers , Agent Farms | Private (isolated, restricted) | `kr-carevo-dev-private-subnet-rst`, `kr-app-rst-sg` |
 
 ### Network Boundary Components
@@ -54,36 +54,6 @@ Each NACL is bound to its corresponding subnet(s) and acts as the first line of 
 ### Traffic Flow: ECT → ICT → RST
 
 The three-layer architecture enforces a unidirectional information flow with NACLs acting as stateless checkpoints at each layer:
-
-
-#### 1. **ECT Zone (Edge/Web) — Public Entry Point**
-- **Ingress**: Port 443 (HTTPS) and 80 (HTTP) from `0.0.0.0/0` (internet-facing)
-- **Egress**: 
-  - Port 8080 to `kr-carevo-dev-private-subnet-ict` (internal app communication)
-  - Ephemeral ports (1024–65535) for response traffic from external services
-
-**NACL Rules:**
-```
-Inbound:
-  Rule 100: Allow HTTPS (port 443) from 0.0.0.0/0
-  Rule 110: Allow HTTP (port 80) from 0.0.0.0/0
-  Rule 130: Deny all other traffic
-
-Outbound:
-  Rule 150: Allow response traffic (ephemeral: 1024–65535) to 0.0.0.0/0
-  Rule 160: Allow app port (8080) to ICT subnet
-```
-
-#### 2. **ICT Zone (App/Controller) — Private Orchestration**
-- **Ingress**:
-  - Port 8080 from `kr-carevo-dev-public-subnet-ect` (web requests)
-  - Port 443 (HTTPS) from `kr-carevo-dev-public-subnet-ect` (API calls from web layer)
-- **Egress**:
-  - Port 8080 to `kr-carevo-dev-private-subnet-rst` (downstream API calls)
-  - Port 443 (HTTPS) to `kr-carevo-dev-public-subnet-ect` (response traffic)
-  - Ephemeral ports (1024–65535) for responses from RST and external services
-
----
 
 Self Hosted - pipeline setup 
 Note : Cost for AWS Trust anchor - $0.10 per 100 credential requests
@@ -508,6 +478,35 @@ Three security groups are created per zone tier, with rules linking them across 
 
 NACLs provide a stateless subnet-level perimeter filter applied before security group rules:
 
+##### 1. **ECT Zone (Edge/Web) — Public Entry Point**
+- **Ingress**: Port 443 (HTTPS) and 80 (HTTP) from `0.0.0.0/0` (internet-facing)
+- **Egress**: 
+  - Port 8080 to `kr-carevo-dev-private-subnet-ict` (internal app communication)
+  - Ephemeral ports (1024–65535) for response traffic from external services
+
+**NACL Rules:**
+```
+Inbound:
+  Rule 100: Allow HTTPS (port 443) from 0.0.0.0/0
+  Rule 110: Allow HTTP (port 80) from 0.0.0.0/0
+  Rule 130: Deny all other traffic
+
+Outbound:
+  Rule 150: Allow response traffic (ephemeral: 1024–65535) to 0.0.0.0/0
+  Rule 160: Allow app port (8080) to ICT subnet
+```
+
+##### 2. **ICT Zone (App/Controller) — Private Orchestration**
+- **Ingress**:
+  - Port 8080 from `kr-carevo-dev-public-subnet-ect` (web requests)
+  - Port 443 (HTTPS) from `kr-carevo-dev-public-subnet-ect` (API calls from web layer)
+- **Egress**:
+  - Port 8080 to `kr-carevo-dev-private-subnet-rst` (downstream API calls)
+  - Port 443 (HTTPS) to `kr-carevo-dev-public-subnet-ect` (response traffic)
+  - Ephemeral ports (1024–65535) for responses from RST and external services
+
+---
+
 **NACL Rules:**
 ```
 Inbound:
@@ -520,7 +519,7 @@ Outbound:
   Rule 160: Allow app port (8080) to RST subnet
 ```
 
-#### 3. **RST Zone (Data/API) — Private Data Layer**
+##### 3. **RST Zone (Data/API) — Private Data Layer**
 - **Ingress**:
   - Port 8080 from `kr-carevo-dev-private-subnet-ict` (internal app requests)
   - Port 443 (HTTPS) from `kr-carevo-dev-private-subnet-ict` (secure API calls from orchestration layer)
@@ -536,15 +535,16 @@ Inbound:
 Outbound:
   Rule 150: Allow response traffic (ephemeral: 1024–65535) to ICT subnet
 ```
+![](.docs/nacl_zones.png)
 
-### Ephemeral Ports and Response Traffic
+##### Ephemeral Ports and Response Traffic
 
 A key aspect of the NACL design is the use of **ephemeral ports** (also called dynamic or temporary ports) for handling response traffic. Since NACLs are stateless, outbound response traffic from a remote server cannot be matched back to the original request — it must be explicitly allowed.
 
-![](.docs/nacl_zones.png)
-![](.docs/nacl_ect_outbound.png)
 
-#### Why Ephemeral Ports Matter
+
+
+###### Why Ephemeral Ports Matter
 
 When a client in the ECT zone initiates a connection to an external service on port 443 (HTTPS), the remote server's response comes back on a high-numbered port in the range **1024–65535** (the ephemeral port range, also called the dynamic port range). 
 
@@ -554,13 +554,15 @@ When a client in the ECT zone initiates a connection to an external service on p
 
 Since NACLs are stateless and don't track connection state like Security Groups do, the inbound response on the ephemeral port must be explicitly allowed by an ingress rule. Without this rule, responses would be dropped even though the outbound request was allowed.
 
-#### Ephemeral Port Range by Layer
+###### Ephemeral Port Range by Layer
 
 | Layer | Outbound Ephemeral Rule | Direction | Port Range | Purpose |
 |---|---|---|---|---|
 | **ECT** | `Rule 150: Allow TCP 1024–65535` | Ingress | 1024–65535 | Responses from internet-based services |
 | **ICT** | `Rule 150: Allow TCP 1024–65535` | Egress | 1024–65535 | Responses from RST layer |
 | **RST** | `Rule 150: Allow TCP 1024–65535` | Egress | 1024–65535 | Responses back to ICT orchestration |
+
+![](.docs/nacl_ect_outbound.png)
 
 #### Practical Communication Examples
 
