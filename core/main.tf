@@ -247,3 +247,53 @@ module "deploy-kr-nacls" {
     module.deploy-kr-subnets,
   ]
 }
+
+# =============================================================================
+# IAM Policy Module — creates customer-managed IAM policies 
+# =============================================================================
+module "deploy-kr-iam-policies" {
+  source = "./module/iam/policy"
+
+  iam_policies = var.iam_policies
+
+  common_tags = {
+    Team    = "Carevo DevOps IAM"
+  }
+}
+
+# =============================================================================
+# IAM Identity Module — creates global IAM groups, attaches policies, creates
+# users, and associates users to groups.
+# Policy ARNs are resolved from the policy module output (policy_arns).
+# =============================================================================
+module "deploy-kr-iam-identity" {
+  source = "./module/iam/identity"
+
+  iam_groups  = var.iam_groups
+  iam_users   = var.iam_users
+  policy_arns = module.deploy-kr-iam-policies.policy_arns
+
+  common_tags = {
+    Team    = "Carevo DevOps IAM"
+  }
+
+  depends_on = [module.deploy-kr-iam-policies]
+}
+
+# =============================================================================
+# EKS IAM Role Module — creates cluster and worker nodegroup IAM roles and
+# attaches managed policies from the policy module output (policy_arns) 
+# based on cluster_roles and nodegroup_roles input maps.
+# =============================================================================
+module "deploy-kr-iam-eks-roles" {
+  source = "./module/iam/role/eks"
+
+  cluster_roles      = var.cluster_roles
+  cluster_policies   = var.cluster_policies
+  nodegroup_roles    = var.nodegroup_roles
+  nodegroup_policies = var.nodegroup_policies
+
+  common_tags = {
+    Team    = "Carevo DevOps IAM"
+  }
+}

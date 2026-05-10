@@ -1,0 +1,101 @@
+component:
+  - sid: "kr-carevo"
+    global :
+      policy :
+        - name: "kr-carevo-dev-iam-viewer-policy"
+          description: "IAM policy for EKS Viewer role"
+          template: ""
+          template_param: [
+            {
+              version: "2012-10-17",
+              Effect: "Allow",
+              Action: [
+                "eks:ListFargateProfiles",
+                "eks:DescribeNodegroup",
+                "eks:ListNodegroups",
+                "eks:ListUpdates",
+                "eks:AccessKubernetesApi",
+                "eks:ListAddons",
+                "eks:DescribeCluster",
+                "eks:DescribeAddonVersions",
+                "eks:ListClusters",
+                "eks:ListIdentityProviderConfigs",
+                "iam:ListRoles"
+              ],
+              Resource: "*"
+            },
+            {
+              version: "2012-10-17",
+              Effect: "Allow",
+              Action: [
+                "ssm:GetParameter"
+              ],
+              Resource: "arn:aws:ssm:*:$${account_id}:parameter/*"
+            }         
+          ]
+      group:
+        - name: "kr-carevo-dev-iam-developer-group"
+          description: "IAM group for EKS Developers"
+          policies: ["kr-carevo-dev-iam-viewer-policy"]
+      user:
+        - name: "bandit_dev"
+          enabled: true
+          description: "IAM user for EKS Developers"
+          groups: ["kr-carevo-dev-iam-developer-group"]
+        - name: "marlin_dev"
+          enabled: true
+          description: "IAM user for EKS Admins"
+          groups: ["kr-carevo-dev-iam-developer-group"]
+    cluster :
+      - name : kr-carevo-dev-cluster
+        role:
+            - name: "kr-carevo-dev-cluster-role"
+              description: "IAM role for EKS Cluster sts role - default trust for EKS service"
+              json : {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": "eks.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                  }
+                ]
+              }
+              template: ""
+        policy :
+            - name: "kr-carevo-dev-cluster-policy"
+              enabled: true
+              description: "IAM policy for EKS Cluster Admin role"
+              arns: ["arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"]
+              roles: ["kr-carevo-dev-cluster-role"]
+    nodegroup :
+      - name : "kr-carevo-dev-worker-nodegroup"
+        role:
+            - name: "kr-carevo-dev-worker-nodegroup-role"
+              description: "IAM role for EKS Worker Nodegroup sts role - default trust for EC2 service"
+              json : {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Allow",
+                      "Principal": {
+                        "Service": "ec2.amazonaws.com"
+                      },
+                      "Action": "sts:AssumeRole"
+                    }
+                  ]
+                }
+              template: ""
+        policy :
+            - name: "kr-carevo-dev-worker-nodegroup-policy"
+              enabled: true
+              description: "IAM policy for EKS Worker Nodegroup role"
+              arns: [ "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy", 
+                      "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly", 
+                      "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy" ]
+              roles: ["kr-carevo-dev-worker-nodegroup-role"]
+
+
+      

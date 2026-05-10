@@ -136,7 +136,7 @@ trap "\"${SCRIPT_DIR}/revert-master-vars.sh\"; rm -f \"${KR_PLAN}\"" EXIT
 export TF_VAR_auth_mode="local"
 
 # ── Ensure symlinks for variable .tf declarations exist in core/ ─────────────
-for tf_file in network rules; do
+for tf_file in network rules identity ; do
   link="${REPO_ROOT}/core/${tf_file}.tf"
   target="variables/${tf_file}.tf"
   if [[ ! -L "${link}" ]]; then
@@ -147,7 +147,10 @@ done
 
 cd "${REPO_ROOT}/core"
 
-VAR_FILES=( -var-file=variables/network.auto.tfvars -var-file=variables/rules.auto.tfvars )
+VAR_FILES=( -var-file=variables/network.auto.tfvars 
+  -var-file=variables/rules.auto.tfvars   
+  -var-file=variables/identity.auto.tfvars
+  )
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

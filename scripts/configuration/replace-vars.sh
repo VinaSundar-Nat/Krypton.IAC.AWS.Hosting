@@ -6,15 +6,17 @@
 # sub-scripts.
 #
 # Sources:
-#   environment/org.yml                      → organisation, program, active env
-#   environment/<ENV>/platform/network.yml   → vpc, AZs, NAT  (component by SID)
-#   environment/<ENV>/zoning/*.yml            → subnet_zones map
-#   environment/<ENV>/platform/rules.yml     → SG and NACL rules
+#   environment/org.yml                        → organisation, program, active env
+#   environment/<ENV>/platform/network.yml     → vpc, AZs, NAT  (component by SID)
+#   environment/<ENV>/zoning/*.yml             → subnet_zones map
+#   environment/<ENV>/platform/rules.yml       → SG and NACL rules
+#   environment/<ENV>/platform/identity.yml    → IAM policies, groups, users, roles
 #
 # Outputs:
-#   core/terraform.tfvars                    → organisation, program, environment tags
-#   core/variables/network.auto.tfvars       → via network-vars.sh
-#   core/variables/rules.auto.tfvars         → via rules-vars.sh
+#   core/terraform.tfvars                      → organisation, program, environment tags
+#   core/variables/network.auto.tfvars         → via network-vars.sh
+#   core/variables/rules.auto.tfvars           → via rules-vars.sh
+#   core/variables/identity.auto.tfvars        → via identity-vars.sh
 #
 # Usage:
 #   ./scripts/configuration/replace-vars.sh kr-carevo dev
@@ -65,9 +67,10 @@ fi
 ENV_DIR="${REPO_ROOT}/environment/${ENV_NAME}"
 NET_YAML="${ENV_DIR}/platform/network.yml"
 RULES_YAML="${ENV_DIR}/platform/rules.yml"
+IDENTITY_YAML="${ENV_DIR}/platform/identity.yml"
 ZONING_DIR="${ENV_DIR}/zoning"
 
-for f in "${NET_YAML}" "${RULES_YAML}" "${TFVARS_TPL}"; do
+for f in "${NET_YAML}" "${RULES_YAML}" "${IDENTITY_YAML}" "${TFVARS_TPL}"; do
   if [[ ! -f "$f" ]]; then
     echo "ERROR: Required file not found: ${f}" >&2
     exit 1
@@ -118,5 +121,11 @@ source "${SCRIPT_DIR}/network-vars.sh"
 # =============================================================================
 # shellcheck source=./rules-vars.sh
 source "${SCRIPT_DIR}/rules-vars.sh"
+
+# =============================================================================
+# identity.auto.tfvars — delegated to identity-vars.sh
+# =============================================================================
+# shellcheck source=./identity-vars.sh
+source "${SCRIPT_DIR}/identity-vars.sh"
 
 echo "── replace-vars.sh: done ────────────────────────────────────────────────"
