@@ -65,7 +65,12 @@ resource "aws_subnet" "kr_subnet" {
       "Type"   = each.value.subnet_type
       "AZ"     = each.value.az
       "Index"  = each.value.az_index
-    }
+    },
+    each.value.subnet_type == "public" ? {
+      "kubernetes.io/role/internal-elb" = "1"
+    } : each.value.subnet_type == "private" ? {
+      "kubernetes.io/role/internal-elb" = "1"
+    } : {}
   )
 
   lifecycle {

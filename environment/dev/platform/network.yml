@@ -1,6 +1,6 @@
 component:
   - sid: "kr-carevo"
-    availability_zone: ["us-east-1a", "us-east-1b"]
+    availability_zone: ["us-east-1a","us-east-1b"]
     # define VPC configurations
     vpc:         
         cidr: "10.10.0.0/16"       

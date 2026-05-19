@@ -28,6 +28,8 @@ component:
             cidr_blocks: "0.0.0.0/0"
            in002 :
             cidr_blocks: "0.0.0.0/0"
+           eg001 :
+            cidr_blocks: "0.0.0.0/0"
           description: "Allow HTTP/HTTPS internet to web SG" 
         - source: "kr-web-ect"
           target: "kr-app-ict"
@@ -140,12 +142,24 @@ component:
                 cidr_block: "0.0.0.0/0"
                 subnet: ""
                 action: "allow"
+            - in003:
+                rule_number: 115
+                description: "Allow Ephemeral port from VPC for EKS control plane"
+                cidr_block: "0.0.0.0/0"
+                subnet: ""
+                action: "allow"
             - in006:
                 rule_number: 130
                 description: "Default deny all other traffic"
                 cidr_block: "0.0.0.0/0"
                 subnet: ""
                 action: "deny"
+            - eg001:
+                rule_number: 140
+                description: "allow response traffic"
+                cidr_block: "0.0.0.0/0"
+                subnet: ""
+                action: "allow"
             - eg003:
                 rule_number: 150
                 description: "allow response traffic"
@@ -172,12 +186,24 @@ component:
                 cidr_block: ""
                 subnet: "kr-carevo-dev-public-subnet-ect"
                 action: "allow"
+            - in003:
+                rule_number: 115
+                description: "Allow Ephemeral port from VPC for EKS control plane"
+                cidr_block: "0.0.0.0/0"
+                subnet: ""
+                action: "allow"
             - in006:
                 rule_number: 130
                 description: "Default deny all other traffic"
                 cidr_block: "0.0.0.0/0"
                 subnet: ""
                 action: "deny"
+            - eg001:
+                rule_number: 140
+                description: "allow response traffic"
+                cidr_block: "0.0.0.0/0"
+                subnet: ""
+                action: "allow"
             - eg003:
                 rule_number: 150
                 description: "allow response traffic"
@@ -204,19 +230,30 @@ component:
                 cidr_block: ""
                 subnet: "kr-carevo-dev-private-subnet-ict"
                 action: "allow"
+            - in003:
+                rule_number: 115
+                description: "Allow Ephemeral port from VPC for EKS control plane"
+                cidr_block: "0.0.0.0/0"
+                subnet: ""
+                action: "allow"
             - in006:
                 rule_number: 130
                 description: "Default deny all other traffic"
                 cidr_block: "0.0.0.0/0"
                 subnet: ""
                 action: "deny"
+            - eg001:
+                rule_number: 140
+                description: "allow response traffic"
+                cidr_block: "0.0.0.0/0"
+                subnet: ""
+                action: "allow"
             - eg003:
                 rule_number: 150
                 description: "allow response traffic"
                 cidr_block: ""
                 subnet: "kr-carevo-dev-private-subnet-ict"
-                action: "allow"
-                   
+                action: "allow"                  
       rules:
         - description: "HTTPS ingress"
           id: "in001"

@@ -11,12 +11,14 @@
 #   environment/<ENV>/zoning/*.yml             → subnet_zones map
 #   environment/<ENV>/platform/rules.yml       → SG and NACL rules
 #   environment/<ENV>/platform/identity.yml    → IAM policies, groups, users, roles
+#   environment/<ENV>/hosting/k8hosting.yml    → K8 EKS Cluster management
 #
 # Outputs:
 #   core/terraform.tfvars                      → organisation, program, environment tags
 #   core/variables/network.auto.tfvars         → via network-vars.sh
 #   core/variables/rules.auto.tfvars           → via rules-vars.sh
 #   core/variables/identity.auto.tfvars        → via identity-vars.sh
+#   core/variables/k8hosting.auto.tfvars        → via k8hosting-vars.sh
 #
 # Usage:
 #   ./scripts/configuration/replace-vars.sh kr-carevo dev
@@ -68,9 +70,10 @@ ENV_DIR="${REPO_ROOT}/environment/${ENV_NAME}"
 NET_YAML="${ENV_DIR}/platform/network.yml"
 RULES_YAML="${ENV_DIR}/platform/rules.yml"
 IDENTITY_YAML="${ENV_DIR}/platform/identity.yml"
+K8HOSTING_YAML="${ENV_DIR}/hosting/k8surface.yml"
 ZONING_DIR="${ENV_DIR}/zoning"
 
-for f in "${NET_YAML}" "${RULES_YAML}" "${IDENTITY_YAML}" "${TFVARS_TPL}"; do
+for f in "${NET_YAML}" "${RULES_YAML}" "${IDENTITY_YAML}" "${K8HOSTING_YAML}" "${TFVARS_TPL}"; do
   if [[ ! -f "$f" ]]; then
     echo "ERROR: Required file not found: ${f}" >&2
     exit 1
@@ -127,5 +130,11 @@ source "${SCRIPT_DIR}/rules-vars.sh"
 # =============================================================================
 # shellcheck source=./identity-vars.sh
 source "${SCRIPT_DIR}/identity-vars.sh"
+
+# =============================================================================
+# k8hosting.auto.tfvars — delegated to k8hosting-vars
+# =============================================================================
+# shellcheck source=./k8hosting-vars.sh
+source "${SCRIPT_DIR}/k8hosting-vars.sh"
 
 echo "── replace-vars.sh: done ────────────────────────────────────────────────"

@@ -19,13 +19,15 @@ locals {
   }
 
   # Flatten subnets for association by type
+  # Keys are derived from subnet_static_metadata (plan-time known, no resource IDs).
+  # subnet_id is resolved from subnet_details inside the resource argument.
   subnet_associations = flatten([
     for rt_name, rt in local.route_tables_map : [
-      for subnet in var.subnet_details :
+      for subnet in var.subnet_static_metadata :
       {
         route_table_name = rt_name
         route_table_type = rt.type
-        subnet_id        = subnet.subnet_id
+        subnet_key       = subnet.key
         subnet_type      = subnet.type
         subnet_name      = subnet.name
         az_key           = "${rt_name}-${subnet.key}"
@@ -103,7 +105,10 @@ resource "aws_route_table_association" "main" {
     if var.enabled
   }
 
-  subnet_id      = each.value.subnet_id
+  subnet_id      = [
+    for sd in var.subnet_details : sd.subnet_id
+    if sd.key == each.value.subnet_key
+  ][0]
   route_table_id = local.rt_ids[each.value.route_table_name]
 
   depends_on = [aws_route_table.kr_route_table]

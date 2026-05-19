@@ -206,6 +206,7 @@ core/.terraform.lock.hcl
 core/terraform.tfstate
 core/terraform.tfstate.backup
 core/backend.tf
+core/k8hosting.tf
 
 *.backup
 *.tfstate.backup

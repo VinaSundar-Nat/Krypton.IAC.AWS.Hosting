@@ -62,3 +62,16 @@ output "subnet_details" {
   ]
 }
 
+output "subnet_static_metadata" {
+  description = "Plan-time deterministic subnet metadata derived entirely from input variables (no resource attributes). Safe for use in for_each keys before subnets exist."
+  value = [
+    for k, item in local.subnets_map : {
+      key        = k
+      name       = item.subnet_name
+      type       = item.subnet_type
+      az         = item.az
+      cidr_block = cidrsubnet(item.base_cidr, local.cidr_bits_map[item.subnet_name], item.az_index)
+    }
+  ]
+}
+
