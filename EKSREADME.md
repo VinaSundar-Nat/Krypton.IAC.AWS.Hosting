@@ -220,33 +220,10 @@ The kr-carevo cluster spans **3 subnets across availability zones**, each servin
 
 | Subnet Name | Type | Zone | CIDR | Purpose |
 |---|---|---|---|---|
-| `kr-carevo-dev-public-subnet-ect` | Public (ect) | e-commerce | 10.10.x.x/24 | ALB, NAT Gateway, public resources |
-| `kr-carevo-dev-private-subnet-rst` | Private (rst) | restricted | 10.10.10.0/24 | Restricted zone nodegroup, internal services |
-| `kr-carevo-dev-private-subnet-ict` | Private (ict) | isolated | 10.10.20.0/24 | Isolated zone nodegroup, sensitive workloads |
+| `kr-carevo-dev-public-subnet-ect` | Public (ect) | internet | 10.10.1.0/24 | ALB, NAT Gateway, public resources |
+| `kr-carevo-dev-private-subnet-rst` | Private (rst) | restricted | 10.10.2.0/24 | Restricted zone nodegroup, internal services |
+| `kr-carevo-dev-private-subnet-ict` | Private (ict) | isolated | 10.10.3.0/24 | Isolated zone nodegroup, sensitive workloads |
 
-**Zone Configuration** (`environment/dev/zoning/*.yaml`)
-
-```yaml
-# app zone — restricted (RST)
-zone:
-  name: app
-  label: rst
-  cidr: "10.10.10.0/24"
-  public: false
-
-# cache zone — isolated (ICT)
-zone:
-  name: cache
-  label: ict
-  cidr: "10.10.20.0/24"
-  public: false
-
-# web zone — e-commerce (ECT)
-zone:
-  name: web
-  label: ect
-  public: true
-```
 
 ### Subnet & NodeGroup Association
 
