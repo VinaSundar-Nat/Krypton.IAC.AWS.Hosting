@@ -52,7 +52,7 @@ locals {
             }
           ] : [
             for s_idx, s in [
-              for sd in var.subnet_details : sd
+              for sd in var.subnet_static_metadata : sd
               if sd.name == rule_cfg.subnet
             ] : {
               key         = "${link.nacl}__${rule_id}__${link_idx}__${s_idx}"

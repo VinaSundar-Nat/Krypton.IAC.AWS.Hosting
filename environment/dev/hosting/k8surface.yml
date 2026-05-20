@@ -1,0 +1,78 @@
+component:
+  - sid: "kr-carevo"
+    opt-in: true
+    cluster :
+      - name : kr-carevo-dev-cluster
+        role : "kr-carevo-dev-cluster-role"
+        version : "1.30"
+        mode : "managed"
+        subnets : [ "kr-carevo-dev-public-subnet-ect", 
+                    "kr-carevo-dev-private-subnet-rst",
+                    "kr-carevo-dev-private-subnet-ict" ]
+        security_groups : [ ]
+        endpoint_public_access : true
+        endpoint_private_access : true
+        nodegroup:
+          - name: "kr-carevo-dev-ict-nodegroup"
+            description: "Nodegroup for EKS cluster"
+            role: "kr-carevo-dev-worker-nodegroup-role"
+            template: "eks-node-group.json"
+            subnets: [ "kr-carevo-dev-private-subnet-ict" ]
+            template_parameters: 
+              name: "kr-carevo-dev-ict-launchtemplate"
+              name_prefix: "kr-carevo-dev-ict-template-"
+              description: "Launch template for EKS cluster ict nodegroup"
+              security_groups: ["kr-carevo-dev-app-ict-sg"]
+              block_device_mappings: 
+                 device_name: "/dev/xvda"
+                 type: "ebs"
+                 volume_size: 20
+                 volume_type: "gp3"
+                 delete_on_termination: true
+                 encrypted: false
+              monitoring: 
+                enabled: true
+              lifecycle: 
+                create_before_destroy: false
+              tags: 
+                team: "Carevo DevOps Hosting"
+            machine :
+              instance_types: ["t4g.medium", "m6g.large"]
+              ami_type: "AL2023_ARM_64_STANDARD"
+              capacity_type: "SPOT"
+            scaling_config:
+              desired_size: 1
+              max_size: 3
+              min_size: 0
+          - name: "kr-carevo-dev-rst-nodegroup"
+            description: "Restricted Nodegroup for EKS cluster"
+            role: "kr-carevo-dev-worker-nodegroup-role"
+            template: "eks-node-group.json"
+            subnets: [ "kr-carevo-dev-private-subnet-rst" ]
+            template_parameters: 
+              name: "kr-carevo-dev-rst-launchtemplate"
+              name_prefix: "kr-carevo-dev-rst-template-"
+              description: "Launch template for EKS cluster rst nodegroup"
+              security_groups: ["kr-carevo-dev-app-rst-sg"]
+              block_device_mappings: 
+                 device_name: "/dev/xvda"
+                 type: "ebs"
+                 volume_size: 20
+                 volume_type: "gp3"
+                 delete_on_termination: true
+                 encrypted: false
+              monitoring: 
+                enabled: true
+              lifecycle: 
+                create_before_destroy: false
+              tags: 
+                team: "Carevo DevOps Hosting"
+            machine :
+              instance_types: ["t4g.medium", "m6g.large"]
+              ami_type: "AL2023_ARM_64_STANDARD"
+              capacity_type: "SPOT"
+            scaling_config:
+              desired_size: 1
+              max_size: 3
+              min_size: 0
+

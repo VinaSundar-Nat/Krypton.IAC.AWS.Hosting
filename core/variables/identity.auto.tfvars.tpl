@@ -31,3 +31,6 @@ nodegroup_roles = REPLACE_NODEGROUP_ROLES
 
 # EKS worker nodegroup managed policy attachments — from identity.yml component.nodegroup[].policy[]
 nodegroup_policies = REPLACE_NODEGROUP_POLICIES
+
+# EKS cluster access entries — from identity.yml component.cluster[].access[]
+cluster_access = REPLACE_CLUSTER_ACCESS

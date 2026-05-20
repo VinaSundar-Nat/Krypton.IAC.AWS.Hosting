@@ -67,14 +67,18 @@ jobs:
           chmod +x scripts/install-deps.sh \
             scripts/configuration/replace-vars.sh \
             scripts/configuration/network-vars.sh \
-            scripts/configuration/rules-vars.sh
+            scripts/configuration/rules-vars.sh \
+            scripts/configuration/identity-vars.sh \
+            scripts/configuration/k8hosting-vars.sh
           scripts/install-deps.sh
           scripts/configuration/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
-          # core/network.tf and core/rules.tf are gitignored symlinks created
-          # locally by runner.sh.  Recreate them here so Terraform's root module
-          # has the variable declarations it needs.
+          # core/network.tf, core/rules.tf, core/identity.tf, and core/k8hosting.tf are
+          # gitignored symlinks created locally by runner.sh.  Recreate them here so
+          # Terraform's root module has the variable declarations it needs.
           ln -sf variables/network.tf core/network.tf
           ln -sf variables/rules.tf core/rules.tf
+          ln -sf variables/identity.tf core/identity.tf
+          ln -sf variables/k8hosting.tf core/k8hosting.tf
 
       # ── Step 3: AWS authentication via GitHub STS OIDC ──────────────────────
       - name: Fetch GitHub OIDC token
@@ -107,6 +111,8 @@ jobs:
             -var="gha_role_arn=${{ secrets.GHA_ROLE_ARN }}" \
             -var-file=variables/network.auto.tfvars \
             -var-file=variables/rules.auto.tfvars \
+            -var-file=variables/identity.auto.tfvars \
+            -var-file=variables/k8hosting.auto.tfvars \
             -out="${PLAN_FILE}" \
             -lock=false \
             -detailed-exitcode 2>&1 | tee /tmp/plan.log
@@ -169,14 +175,18 @@ jobs:
           chmod +x scripts/install-deps.sh \
             scripts/configuration/replace-vars.sh \
             scripts/configuration/network-vars.sh \
-            scripts/configuration/rules-vars.sh
+            scripts/configuration/rules-vars.sh \
+            scripts/configuration/identity-vars.sh \
+            scripts/configuration/k8hosting-vars.sh
           scripts/install-deps.sh
           scripts/configuration/replace-vars.sh "${{ inputs.program }}" "${{ inputs.environment }}"
-          # core/network.tf and core/rules.tf are gitignored symlinks created
-          # locally by runner.sh.  Recreate them here so Terraform's root module
-          # has the variable declarations it needs.
+          # core/network.tf, core/rules.tf, core/identity.tf, and core/k8hosting.tf are
+          # gitignored symlinks created locally by runner.sh.  Recreate them here so
+          # Terraform's root module has the variable declarations it needs.
           ln -sf variables/network.tf core/network.tf
           ln -sf variables/rules.tf core/rules.tf
+          ln -sf variables/identity.tf core/identity.tf
+          ln -sf variables/k8hosting.tf core/k8hosting.tf
 
       # OIDC tokens are short-lived and not shared between jobs; re-fetch here
       - name: Fetch GitHub OIDC token

@@ -65,6 +65,22 @@ variable "nacl_rules" {
   default = []
 }
 
+variable "subnet_static_metadata" {
+  description = <<-EOT
+    Plan-time deterministic subnet metadata from the subnet module.
+    Contains only fields derivable from input variables (no resource IDs).
+    Used for for_each key generation in NACL rules to avoid unknown-at-plan-time errors.
+  EOT
+  type = list(object({
+    key        = string
+    name       = string
+    type       = string
+    az         = string
+    cidr_block = string
+  }))
+  default = []
+}
+
 variable "subnet_details" {
   description = <<-EOT
     List of subnet detail objects from the subnet module's subnet_details output.

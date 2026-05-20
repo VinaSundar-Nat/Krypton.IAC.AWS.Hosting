@@ -134,3 +134,22 @@ variable "nodegroup_policies" {
   }))
   default = []
 }
+
+# ── Cluster: Access Entries ───────────────────────────────────────────────────
+# IAM principals (roles/users) granted Kubernetes API access via EKS access entries.
+# Sourced from identity.yml component.cluster[].access[].
+variable "cluster_access" {
+  description = <<-EOT
+    List of EKS access entry definitions sourced from identity.yml component.cluster[].access[].
+    Each entry grants an IAM principal access to the Kubernetes API with the given EKS access policy.
+    access_scope: "cluster" for full cluster scope, "namespace" for namespace scope.
+  EOT
+  type = list(object({
+    cluster_name  = string
+    principal_arn = string
+    description   = string
+    policy_arn    = string
+    access_scope  = string
+  }))
+  default = []
+}

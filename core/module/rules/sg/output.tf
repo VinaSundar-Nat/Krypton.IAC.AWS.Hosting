@@ -23,3 +23,12 @@ output "security_group_ids" {
     for ref, sg in aws_security_group.kr_security_group : ref => sg.id
   }
 }
+
+# Convenience map of security group name → AWS security group resource ID.
+# Keyed by sg.name so callers can look up by full resource name.
+output "security_group_ids_by_name" {
+  description = "Map of security group name to AWS security group resource ID."
+  value = {
+    for ref, sg in aws_security_group.kr_security_group : sg.name => sg.id
+  }
+}

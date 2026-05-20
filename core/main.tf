@@ -95,6 +95,7 @@ module "deploy-kr-dhcp-options" {
   tags = {
     Name     = var.vpc_name
     Provider = var.dhcp_options.provider
+    Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
   }
 }
 
@@ -112,12 +113,12 @@ module "deploy-kr-subnets" {
 
   common_tags = {
     VPC          = var.vpc_name
-    Organization = var.organisation
-    Program      = var.program
-    Environment  = var.environment
+    Created_On   = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
   }
 
-  depends_on = [module.deploy-kr-vpc]
+  depends_on = [
+    module.deploy-kr-vpc
+  ]
 }
 
 # =============================================================================
@@ -131,6 +132,7 @@ module "deploy-kr-internet-gateway" {
 
   tags = {
     Name = var.internet_gateway_name
+    Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
   }
 
   depends_on = [module.deploy-kr-vpc]
@@ -166,10 +168,7 @@ module "deploy-kr-nat-gateway" {
   }
 
   tags = {
-    Name        = var.nat_gateway_name
-    Environment = var.environment
-    Program     = var.program
-    ManagedBy   = "terraform"
+    Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
   }
 
   depends_on = [
@@ -187,15 +186,13 @@ module "deploy-kr-route-tables" {
   vpc_id              = module.deploy-kr-vpc.kr_vpc_id
   route_tables        = var.route_tables
   subnet_details      = module.deploy-kr-subnets.subnet_details
+  subnet_static_metadata = module.deploy-kr-subnets.subnet_static_metadata
   internet_gateway_id = module.deploy-kr-internet-gateway.igw_id
   nat_gateway_id      = module.deploy-kr-nat-gateway.nat_gateway_id
   enabled             = length(var.route_tables) > 0
 
   tags = {
-    Environment  = var.environment
-    Program      = var.program
-    Organisation = var.organisation
-    ManagedBy    = "terraform"
+    Created_On   = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
   }
 
   depends_on = [
@@ -237,6 +234,7 @@ module "deploy-kr-nacls" {
   nacl_rule_link = var.nacl_rule_link
   nacl_rules     = var.nacl_rules
   subnet_details = module.deploy-kr-subnets.subnet_details
+  subnet_static_metadata = module.deploy-kr-subnets.subnet_static_metadata
 
   common_tags = {
     Team = "Carevo DevOps Network Security"
@@ -296,4 +294,75 @@ module "deploy-kr-iam-eks-roles" {
   common_tags = {
     Team    = "Carevo DevOps IAM"
   }
+}
+
+# =============================================================================
+# EKS Cluster Module — creates EKS clusters with managed mode
+# =============================================================================
+module "deploy-kr-eks-cluster" {
+  source = "./module/hosting/k8/cluster"
+
+  eks_enabled         = var.eks_enabled
+  eks_clusters        = var.eks_clusters
+  cluster_role_arns   = module.deploy-kr-iam-eks-roles.cluster_role_arns
+  subnet_details      = module.deploy-kr-subnets.subnet_details
+  security_group_ids  = module.deploy-kr-security-groups.security_group_ids
+  cluster_access      = var.cluster_access
+
+  common_tags = {
+    Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
+  }
+
+  depends_on = [
+    module.deploy-kr-iam-eks-roles,
+    module.deploy-kr-subnets,
+    module.deploy-kr-security-groups,
+  ]
+}
+
+# =============================================================================
+# EKS Launch Template Module — creates launch templates for nodegroups
+# =============================================================================
+module "deploy-kr-eks-launch-template" {
+  source = "./module/hosting/k8/template/launch"
+
+  eks_enabled                = var.eks_enabled
+  eks_clusters               = var.eks_clusters
+  security_group_ids         = module.deploy-kr-security-groups.security_group_ids_by_name
+  cluster_security_group_ids = module.deploy-kr-eks-cluster.cluster_security_group_ids
+
+  common_tags = {
+      Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
+  }
+
+  depends_on = [
+    module.deploy-kr-security-groups,
+    module.deploy-kr-eks-cluster,
+    module.deploy-kr-iam-eks-roles,
+  ]
+}
+
+# =============================================================================
+# EKS NodeGroup Module — creates EKS nodegroups with launch templates
+# =============================================================================
+module "deploy-kr-eks-nodegroup" {
+  source = "./module/hosting/k8/nodegroup"
+
+  eks_enabled                    = var.eks_enabled
+  eks_clusters                   = var.eks_clusters
+  cluster_names                  = module.deploy-kr-eks-cluster.clusters
+  nodegroup_role_arns            = module.deploy-kr-iam-eks-roles.nodegroup_role_arns
+  launch_template_ids            = module.deploy-kr-eks-launch-template.launch_template_ids
+  launch_template_latest_versions = module.deploy-kr-eks-launch-template.launch_template_latest_versions
+  subnet_details                 = module.deploy-kr-subnets.subnet_details
+
+  common_tags = {
+    Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
+  }
+
+  depends_on = [
+    module.deploy-kr-eks-cluster,
+    module.deploy-kr-eks-launch-template,
+    module.deploy-kr-iam-eks-roles,
+  ]
 }

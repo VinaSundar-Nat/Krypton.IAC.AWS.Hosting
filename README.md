@@ -2,6 +2,7 @@
 
 AWS Infrastructure-as-Code hosting platform using Terraform and IAM Roles Anywhere for keyless On-prem authentication and GHA STS OIDC provider for execution via Github actions pipelines.
 
+
 ## Architecture Overview
 
 This platform organises AWS network resources into named **zones** — logical tiers that map to distinct security boundaries. Each zone is expressed as a combination of VPC, subnets, route tables, NAT/IGW, security groups, and NACLs, and is encoded in resource names using a zone-suffix convention.
@@ -50,6 +51,19 @@ Each logical zone tier is protected by a dedicated NACL that is registered to on
 | **RST** (Data/API) | `kr-carevo-dev-rst-nacl` | `kr-carevo-dev-private-subnet-rst` | Private |
 
 Each NACL is bound to its corresponding subnet(s) and acts as the first line of defense before the Security Group rules are evaluated on individual resources within that subnet.
+
+---
+
+## 📋 Documentation Index
+
+| Component | Documentation | Details |
+|---|---|---|
+
+| **Infrastructure** | This README | Network architecture, zone model, NACL configuration, bootstrap setup |
+| **EKS Cluster** | [EKSREADME.md](EKSREADME.md) | Comprehensive guide for EKS cluster creation, configuration, security architecture, compute options, pricing, and troubleshooting. Includes network zoning, IAM identity management, and known limitations. |
+
+---
+
 
 ### Traffic Flow: ECT → ICT → RST
 

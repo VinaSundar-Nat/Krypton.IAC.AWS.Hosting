@@ -265,6 +265,40 @@ _render_nodegroup_policies() {
   echo "${hcl}"
 }
 
+# ── Cluster: Access Entries ───────────────────────────────────────────────────
+# Collects access entries across all cluster entries for the SID.
+# Each entry grants an IAM principal (role/user) Kubernetes API access.
+# Sourced from identity.yml component.cluster[].access[].
+_render_cluster_access() {
+  local yaml_file="$1"
+  local yq_path="${SEL} | .cluster"
+  local cluster_count
+  cluster_count="$(yq "${yq_path} | length" "${yaml_file}")"
+  [[ "$cluster_count" == "0" || "$cluster_count" == "null" ]] && echo "[]" && return
+
+  local hcl="["
+  local first=true
+  for i in $(seq 0 1 $((cluster_count - 1))); do
+    local cluster_name access_path access_count
+    cluster_name="$(yq "${yq_path}[${i}].name" "${yaml_file}")"
+    access_path="${yq_path}[${i}].access"
+    access_count="$(yq "${access_path} | length" "${yaml_file}")"
+    [[ "$access_count" == "0" || "$access_count" == "null" ]] && continue
+    for j in $(seq 0 1 $((access_count - 1))); do
+      local principal_arn desc policy_arn access_scope
+      principal_arn="$(yq "${access_path}[${j}].principal_arn" "${yaml_file}")"
+      desc="$(yq          "${access_path}[${j}].description"   "${yaml_file}")"
+      policy_arn="$(yq    "${access_path}[${j}].policy_arn"    "${yaml_file}")"
+      access_scope="$(yq  "${access_path}[${j}].access_scope"  "${yaml_file}")"
+      [[ "${first}" == "true" ]] || hcl+=","
+      hcl+=$'\n'"    { cluster_name = \"${cluster_name}\", principal_arn = \"${principal_arn}\", description = \"${desc}\", policy_arn = \"${policy_arn}\", access_scope = \"${access_scope}\" }"
+      first=false
+    done
+  done
+  hcl+=$'\n'"  ]"
+  echo "${hcl}"
+}
+
 IAM_POLICIES="$(_render_iam_policies         "${IDENTITY_YAML}")"
 IAM_GROUPS="$(_render_iam_groups             "${IDENTITY_YAML}")"
 IAM_USERS="$(_render_iam_users               "${IDENTITY_YAML}")"
@@ -272,6 +306,7 @@ CLUSTER_ROLES="$(_render_cluster_roles       "${IDENTITY_YAML}")"
 CLUSTER_POLICIES="$(_render_cluster_policies "${IDENTITY_YAML}")"
 NODEGROUP_ROLES="$(_render_nodegroup_roles   "${IDENTITY_YAML}")"
 NODEGROUP_POLICIES="$(_render_nodegroup_policies "${IDENTITY_YAML}")"
+CLUSTER_ACCESS="$(_render_cluster_access     "${IDENTITY_YAML}")"
 
 # ── Write identity.auto.tfvars from master template ───────────────────────────
 ID_DEST="${OUT_DIR}/identity.auto.tfvars"
@@ -284,4 +319,5 @@ _sub "${ID_DEST}" "REPLACE_CLUSTER_ROLES"      "${CLUSTER_ROLES}"
 _sub "${ID_DEST}" "REPLACE_CLUSTER_POLICIES"   "${CLUSTER_POLICIES}"
 _sub "${ID_DEST}" "REPLACE_NODEGROUP_ROLES"    "${NODEGROUP_ROLES}"
 _sub "${ID_DEST}" "REPLACE_NODEGROUP_POLICIES" "${NODEGROUP_POLICIES}"
+_sub "${ID_DEST}" "REPLACE_CLUSTER_ACCESS"    "${CLUSTER_ACCESS}"
 echo "Written: ${ID_DEST}"
