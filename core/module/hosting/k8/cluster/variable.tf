@@ -102,3 +102,15 @@ variable "common_tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "cluster_access" {
+  description = "List of EKS access entry definitions granting IAM principals Kubernetes API access"
+  type = list(object({
+    cluster_name  = string
+    principal_arn = string
+    description   = string
+    policy_arn    = string
+    access_scope  = string
+  }))
+  default = []
+}

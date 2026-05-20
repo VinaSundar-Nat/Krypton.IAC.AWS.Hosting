@@ -36,6 +36,7 @@ locals {
   }
 }
 
+
 # ── Create Launch Templates for each Nodegroup ─────────────────────────────────
 resource "aws_launch_template" "kr_nodegroup_launch_template" {
   for_each = local.nodegroups_flat
@@ -44,6 +45,14 @@ resource "aws_launch_template" "kr_nodegroup_launch_template" {
   description = each.value.nodegroup.template_parameters.description
 
   vpc_security_group_ids = local.nodegroup_security_group_ids[each.key]
+
+  # Note: Do NOT specify iam_instance_profile here. EKS nodegroup automatically
+  # creates and attaches an instance profile based on the node_role_arn parameter.
+
+  # Note: No user_data needed for AL2023 managed node groups. EKS automatically
+  # injects the nodeadm YAML bootstrap configuration (cluster name, API endpoint,
+  # certificate authority, service CIDR) from the nodegroup resource itself.
+  # Only add user_data here if you need additional custom node setup on top.
 
   # Block device mapping for root volume
   dynamic "block_device_mappings" {

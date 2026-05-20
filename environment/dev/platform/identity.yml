@@ -70,6 +70,15 @@ component:
               description: "IAM policy for EKS Cluster Admin role"
               arns: ["arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"]
               roles: ["kr-carevo-dev-cluster-role"]
+        access:
+            - principal_arn: "arn:aws:iam::210620017481:role/krypton-hosting-tfl-runner"
+              description: "Local IAM Roles Anywhere deployer - full cluster admin"
+              policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+              access_scope: "cluster"
+            - principal_arn: "arn:aws:iam::210620017481:role/krypton-hosting-gha-exec"
+              description: "GitHub Actions OIDC deployer - full cluster admin"
+              policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+              access_scope: "cluster"
     nodegroup :
       - name : "kr-carevo-dev-worker-nodegroup"
         role:

@@ -24,4 +24,3 @@ AWS_PROFILE_NAME="krypton-ta"
 
 
 
-

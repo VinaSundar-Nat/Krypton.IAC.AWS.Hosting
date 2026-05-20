@@ -307,6 +307,7 @@ module "deploy-kr-eks-cluster" {
   cluster_role_arns   = module.deploy-kr-iam-eks-roles.cluster_role_arns
   subnet_details      = module.deploy-kr-subnets.subnet_details
   security_group_ids  = module.deploy-kr-security-groups.security_group_ids
+  cluster_access      = var.cluster_access
 
   common_tags = {
     Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
@@ -337,6 +338,7 @@ module "deploy-kr-eks-launch-template" {
   depends_on = [
     module.deploy-kr-security-groups,
     module.deploy-kr-eks-cluster,
+    module.deploy-kr-iam-eks-roles,
   ]
 }
 

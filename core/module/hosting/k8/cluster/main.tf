@@ -53,6 +53,10 @@ resource "aws_eks_cluster" "kr_cluster" {
     endpoint_private_access = each.value.endpoint_private_access
   }
 
+  access_config {
+    authentication_mode = "API"
+  }
+
   tags = merge(
     var.common_tags,
     {
@@ -61,4 +65,48 @@ resource "aws_eks_cluster" "kr_cluster" {
   )
 
   depends_on = []
+}
+
+# =============================================================================
+# Step 2: EKS Access Entries
+# Grant IAM principals Kubernetes API access using the EKS access entry API.
+# One aws_eks_access_entry + aws_eks_access_policy_association per entry.
+# Key: "${cluster_name}__${principal_arn}" for uniqueness.
+# =============================================================================
+locals {
+  cluster_access_map = {
+    for entry in var.cluster_access :
+    "${entry.cluster_name}__${entry.principal_arn}" => entry
+  }
+}
+
+resource "aws_eks_access_entry" "kr_cluster_access" {
+  for_each = local.cluster_access_map
+
+  cluster_name  = each.value.cluster_name
+  principal_arn = each.value.principal_arn
+  type          = "STANDARD"
+
+  tags = merge(
+    var.common_tags,
+    {
+      Description = each.value.description
+    }
+  )
+
+  depends_on = [aws_eks_cluster.kr_cluster]
+}
+
+resource "aws_eks_access_policy_association" "kr_cluster_access_policy" {
+  for_each = local.cluster_access_map
+
+  cluster_name  = each.value.cluster_name
+  principal_arn = each.value.principal_arn
+  policy_arn    = each.value.policy_arn
+
+  access_scope {
+    type = each.value.access_scope
+  }
+
+  depends_on = [aws_eks_access_entry.kr_cluster_access]
 }
