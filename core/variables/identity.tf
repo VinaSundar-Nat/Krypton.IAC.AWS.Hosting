@@ -141,12 +141,14 @@ variable "nodegroup_policies" {
 variable "cluster_access" {
   description = <<-EOT
     List of EKS access entry definitions sourced from identity.yml component.cluster[].access[].
-    Each entry grants an IAM principal access to the Kubernetes API with the given EKS access policy.
+    Each entry grants an IAM role access to the Kubernetes API with the given EKS access policy.
+    role_name is the IAM role name (without account ID prefix).
+    principal_arn is constructed in the module as: arn:aws:iam::<account>:role/<role_name>
     access_scope: "cluster" for full cluster scope, "namespace" for namespace scope.
   EOT
   type = list(object({
     cluster_name  = string
-    principal_arn = string
+    role_name     = string
     description   = string
     policy_arn    = string
     access_scope  = string

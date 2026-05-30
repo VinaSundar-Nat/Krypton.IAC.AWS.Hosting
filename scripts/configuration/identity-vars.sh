@@ -269,6 +269,8 @@ _render_nodegroup_policies() {
 # Collects access entries across all cluster entries for the SID.
 # Each entry grants an IAM principal (role/user) Kubernetes API access.
 # Sourced from identity.yml component.cluster[].access[].
+# Extracts role_name from access entries; Terraform constructs principal_arn using
+# the running user's AWS account ID via data.aws_caller_identity.
 _render_cluster_access() {
   local yaml_file="$1"
   local yq_path="${SEL} | .cluster"
@@ -285,13 +287,13 @@ _render_cluster_access() {
     access_count="$(yq "${access_path} | length" "${yaml_file}")"
     [[ "$access_count" == "0" || "$access_count" == "null" ]] && continue
     for j in $(seq 0 1 $((access_count - 1))); do
-      local principal_arn desc policy_arn access_scope
-      principal_arn="$(yq "${access_path}[${j}].principal_arn" "${yaml_file}")"
-      desc="$(yq          "${access_path}[${j}].description"   "${yaml_file}")"
+      local role_name desc policy_arn access_scope
+      role_name="$(yq "${access_path}[${j}].role_name" "${yaml_file}")"
+      desc="$(yq      "${access_path}[${j}].description"   "${yaml_file}")"
       policy_arn="$(yq    "${access_path}[${j}].policy_arn"    "${yaml_file}")"
       access_scope="$(yq  "${access_path}[${j}].access_scope"  "${yaml_file}")"
       [[ "${first}" == "true" ]] || hcl+=","
-      hcl+=$'\n'"    { cluster_name = \"${cluster_name}\", principal_arn = \"${principal_arn}\", description = \"${desc}\", policy_arn = \"${policy_arn}\", access_scope = \"${access_scope}\" }"
+      hcl+=$'\n'"    { cluster_name = \"${cluster_name}\", role_name = \"${role_name}\", description = \"${desc}\", policy_arn = \"${policy_arn}\", access_scope = \"${access_scope}\" }"
       first=false
     done
   done

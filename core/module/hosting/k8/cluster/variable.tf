@@ -104,10 +104,10 @@ variable "common_tags" {
 }
 
 variable "cluster_access" {
-  description = "List of EKS access entry definitions granting IAM principals Kubernetes API access"
+  description = "List of EKS access entry definitions granting IAM roles Kubernetes API access"
   type = list(object({
     cluster_name  = string
-    principal_arn = string
+    role_name     = string
     description   = string
     policy_arn    = string
     access_scope  = string
