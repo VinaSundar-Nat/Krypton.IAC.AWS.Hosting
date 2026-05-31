@@ -8,9 +8,9 @@ output "security_groups" {
   description = "List of created security groups with AWS resource id, logical id reference, and name."
   value = [
     for ref, sg in aws_security_group.kr_security_group : {
-      id   = sg.id    # AWS resource ID  (sg-xxxxxxxx)
-      ref  = ref      # Logical id reference (e.g. kr-app-rst)
-      name = sg.name  # Name tag value
+      id   = sg.id   # AWS resource ID  (sg-xxxxxxxx)
+      ref  = ref     # Logical id reference (e.g. kr-app-rst)
+      name = sg.name # Name tag value
     }
   ]
 }

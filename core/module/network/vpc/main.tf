@@ -13,8 +13,8 @@ locals {
   ]
 
   vpc_exists = length(local.external_vpc_ids) > 0
-  vpc_id     = local.vpc_exists ? local.external_vpc_ids[0]                              : aws_vpc.kr_vpc[0].id
-  vpc_arn    = local.vpc_exists ? data.aws_vpc.by_name[local.external_vpc_ids[0]].arn   : aws_vpc.kr_vpc[0].arn
+  vpc_id     = local.vpc_exists ? local.external_vpc_ids[0] : aws_vpc.kr_vpc[0].id
+  vpc_arn    = local.vpc_exists ? data.aws_vpc.by_name[local.external_vpc_ids[0]].arn : aws_vpc.kr_vpc[0].arn
 }
 
 # ── Find VPCs whose Name tag matches the target name ─────────────────────────

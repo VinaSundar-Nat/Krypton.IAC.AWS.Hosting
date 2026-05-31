@@ -301,6 +301,144 @@ _render_cluster_access() {
   echo "${hcl}"
 }
 
+# ── Cluster Identity: Roles ──────────────────────────────────────────────────
+# Sourced from identity.yml component.cluster_identity[].roles[].
+_render_cluster_identity_roles() {
+  local yaml_file="$1"
+  local yq_path="${SEL} | .cluster_identity"
+  local ci_count
+  ci_count="$(yq "${yq_path} | length" "${yaml_file}")"
+  [[ "$ci_count" == "0" || "$ci_count" == "null" ]] && echo "[]" && return
+
+  local hcl="["
+  local first=true
+  for i in $(seq 0 1 $((ci_count - 1))); do
+    local cluster_name roles_path role_count
+    cluster_name="$(yq "${yq_path}[${i}].cluster" "${yaml_file}")"
+    roles_path="${yq_path}[${i}].roles"
+    role_count="$(yq "${roles_path} | length" "${yaml_file}")"
+    [[ "$role_count" == "0" || "$role_count" == "null" ]] && continue
+
+    for j in $(seq 0 1 $((role_count - 1))); do
+      local name sid desc version effect principal action_count actions_hcl
+      name="$(yq "${roles_path}[${j}].name" "${yaml_file}")"
+      sid="$(yq "${roles_path}[${j}].sid" "${yaml_file}")"
+      desc="$(yq "${roles_path}[${j}].description" "${yaml_file}")"
+      version="$(yq "${roles_path}[${j}].template.version" "${yaml_file}")"
+      effect="$(yq "${roles_path}[${j}].template.Effect" "${yaml_file}")"
+      principal="$(yq "${roles_path}[${j}].template.Principal" "${yaml_file}")"
+
+      action_count="$(yq "${roles_path}[${j}].template.Action | length" "${yaml_file}")"
+      actions_hcl="["
+      for k in $(seq 0 1 $((action_count - 1))); do
+        local action
+        action="$(yq "${roles_path}[${j}].template.Action[${k}]" "${yaml_file}")"
+        [[ $k -gt 0 ]] && actions_hcl+=", "
+        actions_hcl+="\"${action}\""
+      done
+      actions_hcl+="]"
+
+      [[ "${first}" == "true" ]] || hcl+=","
+      hcl+=$'\n'"    { cluster_name = \"${cluster_name}\", name = \"${name}\", sid = \"${sid}\", description = \"${desc}\", version = \"${version}\", effect = \"${effect}\", actions = ${actions_hcl}, principal = \"${principal}\" }"
+      first=false
+    done
+  done
+
+  hcl+=$'\n'"  ]"
+  echo "${hcl}"
+}
+
+# ── Cluster Identity: Groups ─────────────────────────────────────────────────
+# Sourced from identity.yml component.cluster_identity[].groups[].
+_render_cluster_identity_groups() {
+  local yaml_file="$1"
+  local yq_path="${SEL} | .cluster_identity"
+  local ci_count
+  ci_count="$(yq "${yq_path} | length" "${yaml_file}")"
+  [[ "$ci_count" == "0" || "$ci_count" == "null" ]] && echo "[]" && return
+
+  local hcl="["
+  local first=true
+  for i in $(seq 0 1 $((ci_count - 1))); do
+    local cluster_name groups_path group_count
+    cluster_name="$(yq "${yq_path}[${i}].cluster" "${yaml_file}")"
+    groups_path="${yq_path}[${i}].groups"
+    group_count="$(yq "${groups_path} | length" "${yaml_file}")"
+    [[ "$group_count" == "0" || "$group_count" == "null" ]] && continue
+
+    for j in $(seq 0 1 $((group_count - 1))); do
+      local name assume_role
+      name="$(yq "${groups_path}[${j}].name" "${yaml_file}")"
+      assume_role="$(yq "${groups_path}[${j}].assume_role" "${yaml_file}")"
+      [[ "${first}" == "true" ]] || hcl+=","
+      hcl+=$'\n'"    { cluster_name = \"${cluster_name}\", name = \"${name}\", assume_role = \"${assume_role}\" }"
+      first=false
+    done
+  done
+
+  hcl+=$'\n'"  ]"
+  echo "${hcl}"
+}
+
+# ── Cluster Identity: Users ──────────────────────────────────────────────────
+# Sourced from identity.yml component.cluster_identity[].groups[].users[].
+_render_cluster_identity_users() {
+  local yaml_file="$1"
+  local yq_path="${SEL} | .cluster_identity"
+  local ci_count
+  ci_count="$(yq "${yq_path} | length" "${yaml_file}")"
+  [[ "$ci_count" == "0" || "$ci_count" == "null" ]] && echo "[]" && return
+
+  local hcl="["
+  local first=true
+  for i in $(seq 0 1 $((ci_count - 1))); do
+    local cluster_name groups_path group_count
+    cluster_name="$(yq "${yq_path}[${i}].cluster" "${yaml_file}")"
+    groups_path="${yq_path}[${i}].groups"
+    group_count="$(yq "${groups_path} | length" "${yaml_file}")"
+    [[ "$group_count" == "0" || "$group_count" == "null" ]] && continue
+
+    for j in $(seq 0 1 $((group_count - 1))); do
+      local group_name users_path user_count
+      group_name="$(yq "${groups_path}[${j}].name" "${yaml_file}")"
+      users_path="${groups_path}[${j}].users"
+      user_count="$(yq "${users_path} | length" "${yaml_file}")"
+      [[ "$user_count" == "0" || "$user_count" == "null" ]] && continue
+
+      for k in $(seq 0 1 $((user_count - 1))); do
+        local name enabled force_destroy namespace desc k8_count k8_hcl
+        name="$(yq "${users_path}[${k}].name" "${yaml_file}")"
+        enabled="$(yq "${users_path}[${k}].enabled" "${yaml_file}")"
+        force_destroy="$(yq "${users_path}[${k}].force_destroy" "${yaml_file}")"
+        namespace="$(yq "${users_path}[${k}].namespace" "${yaml_file}")"
+        desc="$(yq "${users_path}[${k}].description" "${yaml_file}")"
+
+        # k8group defaults to system:masters when not defined.
+        k8_count="$(yq "${users_path}[${k}].k8group // [] | length" "${yaml_file}")"
+        k8_hcl="["
+        if [[ "$k8_count" == "0" || "$k8_count" == "null" ]]; then
+          k8_hcl+="\"system:masters\""
+        else
+          for m in $(seq 0 1 $((k8_count - 1))); do
+            local k8_group
+            k8_group="$(yq "${users_path}[${k}].k8group[${m}]" "${yaml_file}")"
+            [[ $m -gt 0 ]] && k8_hcl+=", "
+            k8_hcl+="\"${k8_group}\""
+          done
+        fi
+        k8_hcl+="]"
+
+        [[ "${first}" == "true" ]] || hcl+=","
+        hcl+=$'\n'"    { cluster_name = \"${cluster_name}\", group_name = \"${group_name}\", name = \"${name}\", enabled = ${enabled}, force_destroy = ${force_destroy}, namespace = \"${namespace}\", k8group = ${k8_hcl}, description = \"${desc}\" }"
+        first=false
+      done
+    done
+  done
+
+  hcl+=$'\n'"  ]"
+  echo "${hcl}"
+}
+
 IAM_POLICIES="$(_render_iam_policies         "${IDENTITY_YAML}")"
 IAM_GROUPS="$(_render_iam_groups             "${IDENTITY_YAML}")"
 IAM_USERS="$(_render_iam_users               "${IDENTITY_YAML}")"
@@ -309,6 +447,9 @@ CLUSTER_POLICIES="$(_render_cluster_policies "${IDENTITY_YAML}")"
 NODEGROUP_ROLES="$(_render_nodegroup_roles   "${IDENTITY_YAML}")"
 NODEGROUP_POLICIES="$(_render_nodegroup_policies "${IDENTITY_YAML}")"
 CLUSTER_ACCESS="$(_render_cluster_access     "${IDENTITY_YAML}")"
+CLUSTER_IDENTITY_ROLES="$(_render_cluster_identity_roles   "${IDENTITY_YAML}")"
+CLUSTER_IDENTITY_GROUPS="$(_render_cluster_identity_groups "${IDENTITY_YAML}")"
+CLUSTER_IDENTITY_USERS="$(_render_cluster_identity_users   "${IDENTITY_YAML}")"
 
 # ── Write identity.auto.tfvars from master template ───────────────────────────
 ID_DEST="${OUT_DIR}/identity.auto.tfvars"
@@ -322,4 +463,7 @@ _sub "${ID_DEST}" "REPLACE_CLUSTER_POLICIES"   "${CLUSTER_POLICIES}"
 _sub "${ID_DEST}" "REPLACE_NODEGROUP_ROLES"    "${NODEGROUP_ROLES}"
 _sub "${ID_DEST}" "REPLACE_NODEGROUP_POLICIES" "${NODEGROUP_POLICIES}"
 _sub "${ID_DEST}" "REPLACE_CLUSTER_ACCESS"    "${CLUSTER_ACCESS}"
+_sub "${ID_DEST}" "REPLACE_CLUSTER_IDENTITY_ROLES"  "${CLUSTER_IDENTITY_ROLES}"
+_sub "${ID_DEST}" "REPLACE_CLUSTER_IDENTITY_GROUPS" "${CLUSTER_IDENTITY_GROUPS}"
+_sub "${ID_DEST}" "REPLACE_CLUSTER_IDENTITY_USERS"  "${CLUSTER_IDENTITY_USERS}"
 echo "Written: ${ID_DEST}"

@@ -10,13 +10,13 @@ locals {
   subnets_by_az = flatten([
     for subnet in var.subnets : [
       for az_idx, az in subnet.availability_zone : {
-        subnet_name    = "${subnet.name}"
-        subnet_type    = subnet.type
-        base_cidr      = subnet.cidr
-        az             = az
-        az_index       = az_idx
-        az_count       = length(subnet.availability_zone)
-        full_key       = "${subnet.name}-${az}"
+        subnet_name = "${subnet.name}"
+        subnet_type = subnet.type
+        base_cidr   = subnet.cidr
+        az          = az
+        az_index    = az_idx
+        az_count    = length(subnet.availability_zone)
+        full_key    = "${subnet.name}-${az}"
       }
     ]
   ])
@@ -61,14 +61,14 @@ resource "aws_subnet" "kr_subnet" {
   tags = merge(
     var.common_tags,
     {
-      "Name"   = each.value.subnet_name
-      "Type"   = each.value.subnet_type
-      "AZ"     = each.value.az
-      "Index"  = each.value.az_index
+      "Name"  = each.value.subnet_name
+      "Type"  = each.value.subnet_type
+      "AZ"    = each.value.az
+      "Index" = each.value.az_index
     },
     each.value.subnet_type == "public" ? {
       "kubernetes.io/role/internal-elb" = "1"
-    } : each.value.subnet_type == "private" ? {
+      } : each.value.subnet_type == "private" ? {
       "kubernetes.io/role/internal-elb" = "1"
     } : {}
   )

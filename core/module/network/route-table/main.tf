@@ -105,7 +105,7 @@ resource "aws_route_table_association" "main" {
     if var.enabled
   }
 
-  subnet_id      = [
+  subnet_id = [
     for sd in var.subnet_details : sd.subnet_id
     if sd.key == each.value.subnet_key
   ][0]

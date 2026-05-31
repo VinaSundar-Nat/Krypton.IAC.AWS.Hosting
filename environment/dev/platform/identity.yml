@@ -130,11 +130,13 @@ component:
                 enabled: true
                 force_destroy: true
                 namespace: ""
+                k8group: ["system:masters"]
                 description: "IAM user for EKS Admins"
               - name: "mille_sabords"
                 enabled: true
                 force_destroy: true
                 namespace: ""
+                k8group: ["system:masters"]
                 description: "IAM user for EKS Admins"
 
       

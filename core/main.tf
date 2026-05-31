@@ -27,11 +27,11 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Environment = var.environment
-      Program     = var.program
+      Environment  = var.environment
+      Program      = var.program
       Organization = var.organisation
-      email       = "vinasundar.aws@gmail.com"
-      ManagedBy   = "Terraform"
+      email        = "vinasundar.aws@gmail.com"
+      ManagedBy    = "Terraform"
     }
   }
 
@@ -93,8 +93,8 @@ module "deploy-kr-dhcp-options" {
   created_on          = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
 
   tags = {
-    Name     = var.vpc_name
-    Provider = var.dhcp_options.provider
+    Name       = var.vpc_name
+    Provider   = var.dhcp_options.provider
     Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
   }
 }
@@ -112,8 +112,8 @@ module "deploy-kr-subnets" {
   enabled  = length(var.subnets) > 0 ? true : false
 
   common_tags = {
-    VPC          = var.vpc_name
-    Created_On   = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
+    VPC        = var.vpc_name
+    Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
   }
 
   depends_on = [
@@ -131,7 +131,7 @@ module "deploy-kr-internet-gateway" {
   enabled = var.internet_gateway_enabled
 
   tags = {
-    Name = var.internet_gateway_name
+    Name       = var.internet_gateway_name
     Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
   }
 
@@ -183,16 +183,16 @@ module "deploy-kr-nat-gateway" {
 module "deploy-kr-route-tables" {
   source = "./module/network/route-table"
 
-  vpc_id              = module.deploy-kr-vpc.kr_vpc_id
-  route_tables        = var.route_tables
-  subnet_details      = module.deploy-kr-subnets.subnet_details
+  vpc_id                 = module.deploy-kr-vpc.kr_vpc_id
+  route_tables           = var.route_tables
+  subnet_details         = module.deploy-kr-subnets.subnet_details
   subnet_static_metadata = module.deploy-kr-subnets.subnet_static_metadata
-  internet_gateway_id = module.deploy-kr-internet-gateway.igw_id
-  nat_gateway_id      = module.deploy-kr-nat-gateway.nat_gateway_id
-  enabled             = length(var.route_tables) > 0
+  internet_gateway_id    = module.deploy-kr-internet-gateway.igw_id
+  nat_gateway_id         = module.deploy-kr-nat-gateway.nat_gateway_id
+  enabled                = length(var.route_tables) > 0
 
   tags = {
-    Created_On   = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
+    Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
   }
 
   depends_on = [
@@ -215,7 +215,7 @@ module "deploy-kr-security-groups" {
   security_group_rules     = var.security_group_rules
 
   common_tags = {
-    Team         = "Carevo DevOps Network Security"
+    Team = "Carevo DevOps Network Security"
   }
 
   depends_on = [module.deploy-kr-vpc]
@@ -229,11 +229,11 @@ module "deploy-kr-security-groups" {
 module "deploy-kr-nacls" {
   source = "./module/rules/nacl"
 
-  vpc_id         = module.deploy-kr-vpc.kr_vpc_id
-  nacl_zone      = var.nacl_zone
-  nacl_rule_link = var.nacl_rule_link
-  nacl_rules     = var.nacl_rules
-  subnet_details = module.deploy-kr-subnets.subnet_details
+  vpc_id                 = module.deploy-kr-vpc.kr_vpc_id
+  nacl_zone              = var.nacl_zone
+  nacl_rule_link         = var.nacl_rule_link
+  nacl_rules             = var.nacl_rules
+  subnet_details         = module.deploy-kr-subnets.subnet_details
   subnet_static_metadata = module.deploy-kr-subnets.subnet_static_metadata
 
   common_tags = {
@@ -255,7 +255,7 @@ module "deploy-kr-iam-policies" {
   iam_policies = var.iam_policies
 
   common_tags = {
-    Team    = "Carevo DevOps IAM"
+    Team = "Carevo DevOps IAM"
   }
 }
 
@@ -272,7 +272,7 @@ module "deploy-kr-iam-identity" {
   policy_arns = module.deploy-kr-iam-policies.policy_arns
 
   common_tags = {
-    Team    = "Carevo DevOps IAM"
+    Team = "Carevo DevOps IAM"
   }
 
   depends_on = [module.deploy-kr-iam-policies]
@@ -292,7 +292,7 @@ module "deploy-kr-iam-eks-roles" {
   nodegroup_policies = var.nodegroup_policies
 
   common_tags = {
-    Team    = "Carevo DevOps IAM"
+    Team = "Carevo DevOps IAM"
   }
 }
 
@@ -302,12 +302,12 @@ module "deploy-kr-iam-eks-roles" {
 module "deploy-kr-eks-cluster" {
   source = "./module/hosting/k8/cluster"
 
-  eks_enabled         = var.eks_enabled
-  eks_clusters        = var.eks_clusters
-  cluster_role_arns   = module.deploy-kr-iam-eks-roles.cluster_role_arns
-  subnet_details      = module.deploy-kr-subnets.subnet_details
-  security_group_ids  = module.deploy-kr-security-groups.security_group_ids
-  cluster_access      = var.cluster_access
+  eks_enabled        = var.eks_enabled
+  eks_clusters       = var.eks_clusters
+  cluster_role_arns  = module.deploy-kr-iam-eks-roles.cluster_role_arns
+  subnet_details     = module.deploy-kr-subnets.subnet_details
+  security_group_ids = module.deploy-kr-security-groups.security_group_ids
+  cluster_access     = var.cluster_access
 
   common_tags = {
     Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
@@ -317,6 +317,26 @@ module "deploy-kr-eks-cluster" {
     module.deploy-kr-iam-eks-roles,
     module.deploy-kr-subnets,
     module.deploy-kr-security-groups,
+  ]
+}
+
+# =============================================================================
+# IAM Cluster Identity Module — creates cluster-specific IAM roles, groups,
+# users, assume-role policies, and EKS access entries.
+# =============================================================================
+module "deploy-kr-iam-cluster-identity" {
+  source = "./module/iam/cluster-identity"
+
+  cluster_identity_roles  = var.cluster_identity_roles
+  cluster_identity_groups = var.cluster_identity_groups
+  cluster_identity_users  = var.cluster_identity_users
+
+  common_tags = {
+    Team = "Carevo DevOps IAM"
+  }
+
+  depends_on = [
+    module.deploy-kr-eks-cluster,
   ]
 }
 
@@ -332,7 +352,7 @@ module "deploy-kr-eks-launch-template" {
   cluster_security_group_ids = module.deploy-kr-eks-cluster.cluster_security_group_ids
 
   common_tags = {
-      Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
+    Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())
   }
 
   depends_on = [
@@ -348,13 +368,13 @@ module "deploy-kr-eks-launch-template" {
 module "deploy-kr-eks-nodegroup" {
   source = "./module/hosting/k8/nodegroup"
 
-  eks_enabled                    = var.eks_enabled
-  eks_clusters                   = var.eks_clusters
-  cluster_names                  = module.deploy-kr-eks-cluster.clusters
-  nodegroup_role_arns            = module.deploy-kr-iam-eks-roles.nodegroup_role_arns
-  launch_template_ids            = module.deploy-kr-eks-launch-template.launch_template_ids
+  eks_enabled                     = var.eks_enabled
+  eks_clusters                    = var.eks_clusters
+  cluster_names                   = module.deploy-kr-eks-cluster.clusters
+  nodegroup_role_arns             = module.deploy-kr-iam-eks-roles.nodegroup_role_arns
+  launch_template_ids             = module.deploy-kr-eks-launch-template.launch_template_ids
   launch_template_latest_versions = module.deploy-kr-eks-launch-template.launch_template_latest_versions
-  subnet_details                 = module.deploy-kr-subnets.subnet_details
+  subnet_details                  = module.deploy-kr-subnets.subnet_details
 
   common_tags = {
     Created_On = formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())

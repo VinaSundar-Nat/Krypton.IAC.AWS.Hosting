@@ -36,7 +36,7 @@ variable "nacl_rule_link" {
     Exactly one of cidr_block or subnet must be non-empty per rule entry.
   EOT
   type = list(object({
-    nacl  = string
+    nacl = string
     rules = list(map(object({
       rule_number = number
       description = string

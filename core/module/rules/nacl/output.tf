@@ -8,8 +8,8 @@ output "network_acls" {
   description = "List of created Network ACLs with AWS resource id, logical id reference, and name."
   value = [
     for ref, nacl in aws_network_acl.kr_network_acl : {
-      id   = nacl.id    # AWS resource ID  (acl-xxxxxxxx)
-      ref  = ref        # Logical id reference (e.g. kr-ect-nacl)
+      id   = nacl.id # AWS resource ID  (acl-xxxxxxxx)
+      ref  = ref     # Logical id reference (e.g. kr-ect-nacl)
       name = nacl.tags["Name"]
     }
   ]

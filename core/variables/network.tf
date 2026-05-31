@@ -86,10 +86,10 @@ variable "subnets" {
 variable "dhcp_options" {
   description = "Custom DHCP options set for the VPC. Set enabled = false to use AWS defaults."
   type = object({
-    enabled                = bool
-    domain_name            = string
-    domain_name_servers    = list(string)
-    provider               = string
+    enabled             = bool
+    domain_name         = string
+    domain_name_servers = list(string)
+    provider            = string
   })
   default = {
     enabled             = false
@@ -139,8 +139,8 @@ variable "route_tables" {
     Each entry carries: name, type (public|private), and routes (with destination CIDR and target).
   EOT
   type = list(object({
-    name   = string
-    type   = string
+    name = string
+    type = string
     routes = list(object({
       destination = string
       target      = optional(string, "")
