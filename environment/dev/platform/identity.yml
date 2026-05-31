@@ -130,12 +130,14 @@ component:
                 enabled: true
                 force_destroy: true
                 namespace: ""
+                policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
                 k8group: ["system:masters"]
                 description: "IAM user for EKS Admins"
               - name: "mille_sabords"
                 enabled: true
                 force_destroy: true
                 namespace: ""
+                policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
                 k8group: ["system:masters"]
                 description: "IAM user for EKS Admins"
 

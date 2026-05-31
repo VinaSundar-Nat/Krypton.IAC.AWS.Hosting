@@ -91,7 +91,7 @@ locals {
 
   cluster_access_map = {
     for entry in local.cluster_access_enriched :
-    "${entry.cluster_name}__${entry.principal_arn}" => entry
+    "${entry.cluster_name}__${entry.role_name}" => entry
   }
 }
 

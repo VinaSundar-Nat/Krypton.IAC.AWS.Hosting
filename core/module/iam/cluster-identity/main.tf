@@ -85,7 +85,7 @@ resource "aws_iam_role" "kr_cluster_role" {
 
   name               = each.value.name
   description        = each.value.description
-  assume_role_policy = aws_iam_policy_document.kr_cluster_role_assume_role_policy[each.key].json
+  assume_role_policy = data.aws_iam_policy_document.kr_cluster_role_assume_role_policy[each.key].json
 
   tags = merge(
     var.common_tags,
@@ -193,7 +193,8 @@ resource "aws_eks_access_entry" "kr_cluster_access_entry" {
   cluster_name      = each.value.cluster_name
   principal_arn     = aws_iam_role.kr_cluster_role[each.key].arn
   type              = "STANDARD"
-  kubernetes_groups = length(local.role_kubernetes_groups[each.key]) > 0 ? local.role_kubernetes_groups[each.key] : ["system:masters"]
+  
+#   kubernetes_groups = length(local.role_kubernetes_groups[each.key]) > 0 ? local.role_kubernetes_groups[each.key] : ["system:masters"]
 
   tags = merge(
     var.common_tags,
@@ -203,4 +204,37 @@ resource "aws_eks_access_entry" "kr_cluster_access_entry" {
   )
 
   depends_on = [aws_iam_role.kr_cluster_role]
+}
+
+# ── Deduplicate access policy associations by (cluster, role, policy_arn) ──────
+# Users in the same group share a role; dedup ensures one association per unique tuple.
+locals {
+  _access_policy_list = distinct([
+    for k, u in local.users_with_existing_group_and_role : {
+      cluster_name = u.cluster_name
+      role_key     = u.role_key
+      policy_arn   = u.policy_arn
+      namespace    = u.namespace
+    }
+  ])
+
+  access_policy_map = {
+    for item in local._access_policy_list :
+    "${item.cluster_name}__${item.role_key}__${item.policy_arn}" => item
+  }
+}
+
+resource "aws_eks_access_policy_association" "kr_cluster_identity_access_policy" {
+  for_each = local.access_policy_map
+
+  cluster_name  = each.value.cluster_name
+  principal_arn = aws_iam_role.kr_cluster_role[each.value.role_key].arn
+  policy_arn    = each.value.policy_arn
+
+  access_scope {
+    type       = trimspace(each.value.namespace) != "" ? "namespace" : "cluster"
+    namespaces = trimspace(each.value.namespace) != "" ? [each.value.namespace] : []
+  }
+
+  depends_on = [aws_eks_access_entry.kr_cluster_access_entry]
 }

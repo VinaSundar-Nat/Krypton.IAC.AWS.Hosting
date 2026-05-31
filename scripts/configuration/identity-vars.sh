@@ -406,11 +406,12 @@ _render_cluster_identity_users() {
       [[ "$user_count" == "0" || "$user_count" == "null" ]] && continue
 
       for k in $(seq 0 1 $((user_count - 1))); do
-        local name enabled force_destroy namespace desc k8_count k8_hcl
+        local name enabled force_destroy namespace policy_arn desc k8_count k8_hcl
         name="$(yq "${users_path}[${k}].name" "${yaml_file}")"
         enabled="$(yq "${users_path}[${k}].enabled" "${yaml_file}")"
         force_destroy="$(yq "${users_path}[${k}].force_destroy" "${yaml_file}")"
         namespace="$(yq "${users_path}[${k}].namespace" "${yaml_file}")"
+        policy_arn="$(yq "${users_path}[${k}].policy_arn" "${yaml_file}")"
         desc="$(yq "${users_path}[${k}].description" "${yaml_file}")"
 
         # k8group defaults to system:masters when not defined.
@@ -429,7 +430,7 @@ _render_cluster_identity_users() {
         k8_hcl+="]"
 
         [[ "${first}" == "true" ]] || hcl+=","
-        hcl+=$'\n'"    { cluster_name = \"${cluster_name}\", group_name = \"${group_name}\", name = \"${name}\", enabled = ${enabled}, force_destroy = ${force_destroy}, namespace = \"${namespace}\", k8group = ${k8_hcl}, description = \"${desc}\" }"
+        hcl+=$'\n'"    { cluster_name = \"${cluster_name}\", group_name = \"${group_name}\", name = \"${name}\", enabled = ${enabled}, force_destroy = ${force_destroy}, namespace = \"${namespace}\", policy_arn = \"${policy_arn}\", k8group = ${k8_hcl}, description = \"${desc}\" }"
         first=false
       done
     done

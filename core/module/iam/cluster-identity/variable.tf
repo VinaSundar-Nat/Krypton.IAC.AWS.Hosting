@@ -39,6 +39,7 @@ variable "cluster_identity_users" {
     enabled       = bool
     force_destroy = bool
     namespace     = string
+    policy_arn    = string
     k8group       = list(string)
     description   = string
   }))
