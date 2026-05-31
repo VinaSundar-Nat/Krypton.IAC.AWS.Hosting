@@ -34,9 +34,9 @@ variable "security_group_rule_link" {
     Exactly one of cidr_blocks or target must be set per rule entry.
   EOT
   type = list(object({
-    source      = string
-    target      = string
-    rules       = map(object({
+    source = string
+    target = string
+    rules = map(object({
       cidr_blocks = string
     }))
     description = string

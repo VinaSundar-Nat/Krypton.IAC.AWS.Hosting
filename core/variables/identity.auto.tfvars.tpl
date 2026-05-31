@@ -34,3 +34,12 @@ nodegroup_policies = REPLACE_NODEGROUP_POLICIES
 
 # EKS cluster access entries — from identity.yml component.cluster[].access[]
 cluster_access = REPLACE_CLUSTER_ACCESS
+
+# Cluster identity roles — from identity.yml component.cluster_identity[].roles[]
+cluster_identity_roles = REPLACE_CLUSTER_IDENTITY_ROLES
+
+# Cluster identity groups — from identity.yml component.cluster_identity[].groups[]
+cluster_identity_groups = REPLACE_CLUSTER_IDENTITY_GROUPS
+
+# Cluster identity users — from identity.yml component.cluster_identity[].groups[].users[]
+cluster_identity_users = REPLACE_CLUSTER_IDENTITY_USERS

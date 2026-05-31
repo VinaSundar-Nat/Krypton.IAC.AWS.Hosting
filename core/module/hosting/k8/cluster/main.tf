@@ -5,6 +5,9 @@
 # Only processes clusters with mode = "managed".
 # =============================================================================
 
+# ── Get current AWS account ID for constructing principal ARNs ────────────────
+data "aws_caller_identity" "current" {}
+
 locals {
   # Filter enabled clusters with managed mode
   managed_clusters = {
@@ -54,7 +57,7 @@ resource "aws_eks_cluster" "kr_cluster" {
   }
 
   access_config {
-    authentication_mode = "API"
+    authentication_mode = "API" # or "API_AND_CONFIG_MAP"
   }
 
   tags = merge(
@@ -69,14 +72,26 @@ resource "aws_eks_cluster" "kr_cluster" {
 
 # =============================================================================
 # Step 2: EKS Access Entries
-# Grant IAM principals Kubernetes API access using the EKS access entry API.
+# Grant IAM roles Kubernetes API access using the EKS access entry API.
+# Constructs principal_arn from role_name and the current AWS account ID.
 # One aws_eks_access_entry + aws_eks_access_policy_association per entry.
 # Key: "${cluster_name}__${principal_arn}" for uniqueness.
 # =============================================================================
+
+# ── Enrich access entries with constructed principal ARNs ────────────────────────
 locals {
+  cluster_access_enriched = [
+    for entry in var.cluster_access : merge(
+      entry,
+      {
+        principal_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${entry.role_name}"
+      }
+    )
+  ]
+
   cluster_access_map = {
-    for entry in var.cluster_access :
-    "${entry.cluster_name}__${entry.principal_arn}" => entry
+    for entry in local.cluster_access_enriched :
+    "${entry.cluster_name}__${entry.role_name}" => entry
   }
 }
 

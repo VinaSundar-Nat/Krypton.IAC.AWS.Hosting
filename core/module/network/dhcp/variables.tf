@@ -1,26 +1,26 @@
-variable enabled {
-    type = bool
+variable "enabled" {
+  type = bool
 }
-variable domain_name {
-    type = string
-}
-
-variable domain_name_servers {
-    type = list(string)
+variable "domain_name" {
+  type = string
 }
 
-variable tags {
-    type = map(string)
+variable "domain_name_servers" {
+  type = list(string)
 }
 
-variable vpc_id {
-    type = string
+variable "tags" {
+  type = map(string)
 }
 
-variable region {
-    type = string
+variable "vpc_id" {
+  type = string
 }
 
-variable created_on {
-    type = string
+variable "region" {
+  type = string
+}
+
+variable "created_on" {
+  type = string
 }

@@ -40,30 +40,30 @@ locals {
     for link_idx, link in var.nacl_rule_link : [
       for rule_map in link.rules : [
         for rule_id, rule_cfg in rule_map :
-          rule_cfg.cidr_block != "" ? [
-            {
-              key         = "${link.nacl}__${rule_id}__${link_idx}__cidr"
-              nacl_id     = link.nacl
-              rule_id     = rule_id
-              rule_number = rule_cfg.rule_number
-              description = rule_cfg.description
-              cidr_block  = rule_cfg.cidr_block
-              action      = rule_cfg.action
-            }
+        rule_cfg.cidr_block != "" ? [
+          {
+            key         = "${link.nacl}__${rule_id}__${link_idx}__cidr"
+            nacl_id     = link.nacl
+            rule_id     = rule_id
+            rule_number = rule_cfg.rule_number
+            description = rule_cfg.description
+            cidr_block  = rule_cfg.cidr_block
+            action      = rule_cfg.action
+          }
           ] : [
-            for s_idx, s in [
-              for sd in var.subnet_static_metadata : sd
-              if sd.name == rule_cfg.subnet
+          for s_idx, s in [
+            for sd in var.subnet_static_metadata : sd
+            if sd.name == rule_cfg.subnet
             ] : {
-              key         = "${link.nacl}__${rule_id}__${link_idx}__${s_idx}"
-              nacl_id     = link.nacl
-              rule_id     = rule_id
-              rule_number = rule_cfg.rule_number + s_idx
-              description = rule_cfg.description
-              cidr_block  = s.cidr_block
-              action      = rule_cfg.action
-            }
-          ]
+            key         = "${link.nacl}__${rule_id}__${link_idx}__${s_idx}"
+            nacl_id     = link.nacl
+            rule_id     = rule_id
+            rule_number = rule_cfg.rule_number + s_idx
+            description = rule_cfg.description
+            cidr_block  = s.cidr_block
+            action      = rule_cfg.action
+          }
+        ]
       ]
     ]
   ])

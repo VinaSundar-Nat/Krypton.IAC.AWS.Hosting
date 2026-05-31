@@ -36,7 +36,7 @@ component:
       group:
         - name: "kr-carevo-dev-iam-developer-group"
           description: "IAM group for EKS Developers"
-          policies: ["kr-carevo-dev-iam-viewer-policy"]
+          policies: ["kr-carevo-dev-iam-viewer-policy"]        
       user:
         - name: "bandit_dev"
           enabled: true
@@ -71,11 +71,13 @@ component:
               arns: ["arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"]
               roles: ["kr-carevo-dev-cluster-role"]
         access:
-            - principal_arn: "arn:aws:iam::210620017481:role/krypton-hosting-tfl-runner"
+            - role_name: "krypton-hosting-tfl-runner"
+              type: "role"
               description: "Local IAM Roles Anywhere deployer - full cluster admin"
               policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
               access_scope: "cluster"
-            - principal_arn: "arn:aws:iam::210620017481:role/krypton-hosting-gha-exec"
+            - role_name: "krypton-hosting-gha-exec"
+              type: "role"
               description: "GitHub Actions OIDC deployer - full cluster admin"
               policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
               access_scope: "cluster"
@@ -106,6 +108,37 @@ component:
                       "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
                       "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore" ]
               roles: ["kr-carevo-dev-worker-nodegroup-role"]
-
+    cluster_identity:
+      - cluster: "kr-carevo-dev-cluster"
+        roles:
+          - name: "kr-carevo-dev-cluster-adm-role"
+            sid: "adm-01"
+            description: "IAM role for EKS Cluster Admin access via aws-auth configmap"           
+            template:  {
+              version: "2012-10-17",
+              Effect: "Allow",
+              Action: [
+                "sts:AssumeRole"
+              ],
+              Principal: "arn:aws:iam::$${account_id}:root"
+            }
+        groups:
+          - name: "kr-carevo-dev-cluster-adm-group"
+            assume_role: "adm-01"
+            users:
+              - name: "blistering_barnacles"
+                enabled: true
+                force_destroy: true
+                namespace: ""
+                policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+                k8group: ["system:masters"]
+                description: "IAM user for EKS Admins"
+              - name: "mille_sabords"
+                enabled: true
+                force_destroy: true
+                namespace: ""
+                policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+                k8group: ["system:masters"]
+                description: "IAM user for EKS Admins"
 
       

@@ -141,15 +141,79 @@ variable "nodegroup_policies" {
 variable "cluster_access" {
   description = <<-EOT
     List of EKS access entry definitions sourced from identity.yml component.cluster[].access[].
-    Each entry grants an IAM principal access to the Kubernetes API with the given EKS access policy.
+    Each entry grants an IAM role access to the Kubernetes API with the given EKS access policy.
+    role_name is the IAM role name (without account ID prefix).
+    principal_arn is constructed in the module as: arn:aws:iam::<account>:role/<role_name>
     access_scope: "cluster" for full cluster scope, "namespace" for namespace scope.
   EOT
   type = list(object({
+    cluster_name = string
+    role_name    = string
+    description  = string
+    policy_arn   = string
+    access_scope = string
+  }))
+  default = []
+}
+
+# ── Cluster Identity: Roles ──────────────────────────────────────────────────
+# IAM roles used by human/admin identities to access EKS clusters.
+# Sourced from identity.yml component.cluster_identity[].roles[].
+variable "cluster_identity_roles" {
+  description = <<-EOT
+    List of cluster identity IAM role definitions from identity.yml component.cluster_identity[].roles[].
+    principal may include the literal "$${account_id}" placeholder, replaced at apply time.
+    sid is used by groups (assume_role) to map to the target role.
+  EOT
+  type = list(object({
+    cluster_name = string
+    name         = string
+    sid          = string
+    description  = string
+    version      = string
+    effect       = string
+    actions      = list(string)
+    principal    = string
+  }))
+  default = []
+}
+
+# ── Cluster Identity: Groups ─────────────────────────────────────────────────
+# IAM groups for cluster access; each points to a role SID via assume_role.
+# Sourced from identity.yml component.cluster_identity[].groups[].
+variable "cluster_identity_groups" {
+  description = <<-EOT
+    List of cluster identity IAM groups from identity.yml component.cluster_identity[].groups[].
+    assume_role references cluster_identity_roles.sid within the same cluster_name.
+  EOT
+  type = list(object({
+    cluster_name = string
+    name         = string
+    assume_role  = string
+  }))
+  default = []
+}
+
+# ── Cluster Identity: Users ──────────────────────────────────────────────────
+# IAM users assigned to cluster identity groups.
+# Sourced from identity.yml component.cluster_identity[].groups[].users[].
+variable "cluster_identity_users" {
+  description = <<-EOT
+    List of cluster identity IAM users from identity.yml component.cluster_identity[].groups[].users[].
+    group_name references cluster_identity_groups.name in the same cluster_name.
+    namespace is mapped to IAM user path when provided.
+    k8group is mapped to EKS access entry kubernetes_groups for the linked cluster identity role.
+  EOT
+  type = list(object({
     cluster_name  = string
-    principal_arn = string
-    description   = string
+    group_name    = string
+    name          = string
+    enabled       = bool
+    force_destroy = bool
+    namespace     = string
     policy_arn    = string
-    access_scope  = string
+    k8group       = list(string)
+    description   = string
   }))
   default = []
 }

@@ -15,17 +15,17 @@ variable "eks_clusters" {
     security_groups         = list(string)
     endpoint_public_access  = bool
     endpoint_private_access = bool
-    nodegroups              = list(object({
+    nodegroups = list(object({
       name        = string
       description = string
       role        = string
       template    = string
       subnets     = list(string)
       template_parameters = object({
-        name                  = string
-        name_prefix           = string
-        description           = string
-        security_groups       = list(string)
+        name            = string
+        name_prefix     = string
+        description     = string
+        security_groups = list(string)
         block_device_mappings = object({
           device_name           = string
           type                  = string
@@ -80,13 +80,13 @@ variable "cluster_role_arns" {
 variable "subnet_details" {
   description = "List of subnet details including subnet ID, name, AZ from subnet module"
   type = list(object({
-    key         = string
-    subnet_id   = string
-    name        = string
-    cidr_block  = string
-    type        = string
-    az          = string
-    vpc_id      = string
+    key        = string
+    subnet_id  = string
+    name       = string
+    cidr_block = string
+    type       = string
+    az         = string
+    vpc_id     = string
   }))
   default = []
 }
@@ -104,13 +104,13 @@ variable "common_tags" {
 }
 
 variable "cluster_access" {
-  description = "List of EKS access entry definitions granting IAM principals Kubernetes API access"
+  description = "List of EKS access entry definitions granting IAM roles Kubernetes API access"
   type = list(object({
-    cluster_name  = string
-    principal_arn = string
-    description   = string
-    policy_arn    = string
-    access_scope  = string
+    cluster_name = string
+    role_name    = string
+    description  = string
+    policy_arn   = string
+    access_scope = string
   }))
   default = []
 }

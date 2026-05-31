@@ -38,9 +38,9 @@ variable "security_group_rule_link" {
     means the rule uses the SG-to-SG reference instead of a CIDR.
   EOT
   type = list(object({
-    source      = string
-    target      = string
-    rules       = map(object({
+    source = string
+    target = string
+    rules = map(object({
       cidr_blocks = string
     }))
     description = string
@@ -96,7 +96,7 @@ variable "nacl_rule_link" {
     rules is a list of rule associations with rule_number, description, cidr_block, subnet, and action.
   EOT
   type = list(object({
-    nacl  = string
+    nacl = string
     rules = list(map(object({
       rule_number = number
       description = string

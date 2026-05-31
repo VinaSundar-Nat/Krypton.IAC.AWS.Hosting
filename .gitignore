@@ -205,6 +205,8 @@ core/identity.tf
 core/.terraform.lock.hcl
 core/terraform.tfstate
 core/terraform.tfstate.backup
+*.tfplan
+core/.terraform.tfstate.lock.info
 core/backend.tf
 core/k8hosting.tf
 

@@ -16,13 +16,13 @@ variable "subnet_details" {
     Each entry contains: key, subnet_id, name, cidr_block, type, az, vpc_id.
   EOT
   type = list(object({
-    key         = string
-    subnet_id   = string
-    name        = string
-    cidr_block  = string
-    type        = string
-    az          = string
-    vpc_id      = string
+    key        = string
+    subnet_id  = string
+    name       = string
+    cidr_block = string
+    type       = string
+    az         = string
+    vpc_id     = string
   }))
   default = []
 }
@@ -50,8 +50,8 @@ variable "route_tables" {
     Routes include destination CIDR and target (gateway name).
   EOT
   type = list(object({
-    name   = string
-    type   = string
+    name = string
+    type = string
     routes = list(object({
       destination = string
       target      = optional(string, "")
