@@ -14,11 +14,9 @@ terraform {
       source  = "hashicorp/time"
       version = "0.9.1"
     }
-  }
-
-  provider_meta "aws" {
-    user_agent = [
-      "github.com/VinaSundar-Nat/Krypton.IAC.AWS.Hosting"
-    ]
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.20"
+    }
   }
 }

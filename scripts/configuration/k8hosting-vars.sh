@@ -198,6 +198,42 @@ _render_nodegroups() {
   echo "${hcl}"
 }
 
+# Helper: renders namespace array as HCL map (flattened by cluster_name:namespace_name)
+_render_namespace_map() {
+  local yaml_file="$1"
+  local yq_path="${SEL} | .cluster"
+  local cluster_count
+  cluster_count="$(yq "${yq_path} | length" "${yaml_file}")"
+  [[ "$cluster_count" == "0" || "$cluster_count" == "null" ]] && echo "{}" && return
+
+  local hcl="{"
+  local first=true
+  for i in $(seq 0 1 $((cluster_count - 1))); do
+    local c_path="${yq_path}[${i}]"
+    local c_name
+    local ns_count
+    
+    c_name="$(yq "${c_path}.name" "${yaml_file}")"
+    ns_count="$(yq "${c_path}.namespace | length" "${yaml_file}" 2>/dev/null || echo 0)"
+    [[ "$ns_count" == "0" || "$ns_count" == "null" ]] && continue
+
+    for j in $(seq 0 1 $((ns_count - 1))); do
+      local ns_path="${c_path}.namespace[${j}]"
+      local ns_name ns_desc ns_labels
+
+      ns_name="$(yq "${ns_path}.name" "${yaml_file}")"
+      ns_desc="$(yq "${ns_path}.description" "${yaml_file}")"
+      ns_labels="$(_render_tags "${yaml_file}" "${ns_path}.labels")"
+
+      [[ "${first}" == "true" ]] || hcl+=","
+      hcl+=$'\n'"    \"${c_name}:${ns_name}\" = { cluster_name = \"${c_name}\", name = \"${ns_name}\", description = \"${ns_desc}\", labels = ${ns_labels} }"
+      first=false
+    done
+  done
+  hcl+=$'\n'"  }"
+  echo "${hcl}"
+}
+
 # Helper: renders EKS clusters as HCL list with nested nodegroups
 _render_eks_clusters() {
   local yaml_file="$1"
@@ -246,8 +282,28 @@ _render_eks_clusters() {
     # Render nested nodegroups
     c_nodegroups="$(_render_nodegroups "${yaml_file}" "${c_path}.nodegroup")"
 
+    # Render nested namespaces as HCL list of objects
+    local c_ns_count c_namespaces
+    c_ns_count="$(yq "${c_path}.namespace | length" "${yaml_file}" 2>/dev/null || echo 0)"
+    if [[ "$c_ns_count" == "0" || "$c_ns_count" == "null" ]]; then
+      c_namespaces="[]"
+    else
+      c_namespaces="["
+      for j in $(seq 0 1 $((c_ns_count - 1))); do
+        local ns_path="${c_path}.namespace[${j}]"
+        local ns_name ns_sid ns_desc ns_labels
+        ns_name="$(yq "${ns_path}.name" "${yaml_file}")"
+        ns_sid="$(yq "${ns_path}.sid" "${yaml_file}")"
+        ns_desc="$(yq "${ns_path}.description" "${yaml_file}")"
+        ns_labels="$(_render_tags "${yaml_file}" "${ns_path}.labels")"
+        [[ $j -gt 0 ]] && c_namespaces+=","
+        c_namespaces+=$'\n'"      { name = \"${ns_name}\", sid = \"${ns_sid}\", description = \"${ns_desc}\", labels = ${ns_labels} }"
+      done
+      c_namespaces+=$'\n'"    ]"
+    fi
+
     [[ $i -gt 0 ]] && hcl+=","
-    hcl+=$'\n'"    { name = \"${c_name}\", role = \"${c_role}\", version = \"${c_version}\", mode = \"${c_mode}\", subnets = ${c_subnets_hcl}, security_groups = ${c_sg_hcl}, endpoint_public_access = ${c_ep_pub}, endpoint_private_access = ${c_ep_priv}, nodegroups = ${c_nodegroups} }"
+    hcl+=$'\n'"    { name = \"${c_name}\", role = \"${c_role}\", version = \"${c_version}\", mode = \"${c_mode}\", subnets = ${c_subnets_hcl}, security_groups = ${c_sg_hcl}, endpoint_public_access = ${c_ep_pub}, endpoint_private_access = ${c_ep_priv}, nodegroups = ${c_nodegroups}, namespace = ${c_namespaces} }"
   done
   hcl+=$'\n'"  ]"
   echo "${hcl}"
@@ -257,13 +313,22 @@ _render_eks_clusters() {
 EKS_ENABLED="$(yq "${SEL} | .opt-in" "${K8HOSTING_YAML}")"
 [[ -z "$EKS_ENABLED" || "$EKS_ENABLED" == "null" ]] && EKS_ENABLED="false"
 
+# Extract the first cluster name for kubernetes provider lookup
+KUBERNETES_CLUSTER_NAME="$(yq "${SEL} | .cluster[0].name" "${K8HOSTING_YAML}")"
+[[ -z "$KUBERNETES_CLUSTER_NAME" || "$KUBERNETES_CLUSTER_NAME" == "null" ]] && KUBERNETES_CLUSTER_NAME=""
+
 # Render EKS clusters
 EKS_CLUSTERS="$(_render_eks_clusters "${K8HOSTING_YAML}")"
+
+# Render namespace map (flattened)
+NAMESPACE_MAP="$(_render_namespace_map "${K8HOSTING_YAML}")"
 
 # ── Write k8hosting.auto.tfvars from master template ──────────────────────────
 K8_DEST="${OUT_DIR}/k8hosting.auto.tfvars"
 cp "${OUT_DIR}/k8hosting.auto.tfvars.tpl" "${K8_DEST}"
 
 _sub "${K8_DEST}" "REPLACE_EKS_ENABLED" "${EKS_ENABLED}"
+_sub "${K8_DEST}" "REPLACE_KUBERNETES_CLUSTER_NAME" "${KUBERNETES_CLUSTER_NAME}"
 _sub "${K8_DEST}" "REPLACE_EKS_CLUSTERS" "${EKS_CLUSTERS}"
+_sub "${K8_DEST}" "REPLACE_NAMESPACE_MAP" "${NAMESPACE_MAP}"
 echo "Written: ${K8_DEST}"

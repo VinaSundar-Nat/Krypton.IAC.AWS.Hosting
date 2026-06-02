@@ -185,8 +185,6 @@ Thumbs.db
 *.log
 log/
 
-copilot-instructions.*
-
 .auth/cert/*
 
 # Database files
@@ -212,3 +210,6 @@ core/k8hosting.tf
 
 *.backup
 *.tfstate.backup
+
+#copilot-instructions.*
+s

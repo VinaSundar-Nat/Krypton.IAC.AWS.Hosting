@@ -159,6 +159,61 @@ echo " terraform init (local — local backend)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 terraform init
 
+# ── Pre-destroy: remove Kubernetes namespaces before cluster teardown ─────────
+# The Kubernetes provider resolves its endpoint from data.aws_eks_cluster.kr_target.
+# During a full destroy that data source resolves to null (its depends_on dependency
+# is scheduled for deletion), causing the provider to fall back to http://localhost.
+#
+# Two cases handled:
+#   1. Cluster still live  → targeted terraform destroy (API call, clean removal)
+#   2. Cluster already gone → terraform state rm (drops orphaned state, no API needed)
+if [[ "${TF_COMMAND}" == "destroy" ]]; then
+  if terraform state list module.deploy-kr-eks-namespaces 2>/dev/null | grep -q .; then
+    # Read the cluster name written by replace-vars.sh into k8hosting.auto.tfvars
+    K8S_CLUSTER_NAME="$(grep 'kubernetes_cluster_name' variables/k8hosting.auto.tfvars \
+      | sed 's/.*= *"\(.*\)"/\1/')"
+
+    # Check whether the cluster API is still reachable in AWS
+    CLUSTER_EXISTS=false
+    if [[ -n "${K8S_CLUSTER_NAME}" ]] && \
+       AWS_PROFILE="${AWS_PROFILE_NAME}" aws eks describe-cluster \
+         --name "${K8S_CLUSTER_NAME}" \
+         --region "${AWS_REGION}" \
+         --output text &>/dev/null; then
+      CLUSTER_EXISTS=true
+    fi
+
+    if [[ "${CLUSTER_EXISTS}" == "true" ]]; then
+      echo ""
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo " Pre-destroy: Kubernetes namespaces (targeted — cluster live)"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      set +e
+      terraform destroy \
+        "${VAR_FILES[@]}" \
+        -target=module.deploy-kr-eks-namespaces \
+        -lock=false \
+        -auto-approve
+      NS_DESTROY_EXIT=$?
+      set -e
+      if [[ ${NS_DESTROY_EXIT} -ne 0 ]]; then
+        echo "ERROR: Targeted namespace destroy failed (exit ${NS_DESTROY_EXIT})." >&2
+        exit "${NS_DESTROY_EXIT}"
+      fi
+    else
+      echo ""
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo " Pre-destroy: EKS cluster '${K8S_CLUSTER_NAME}' not found in AWS."
+      echo " Removing orphaned namespace state entries (no API call needed)."
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      terraform state rm module.deploy-kr-eks-namespaces
+    fi
+  else
+    echo ""
+    echo "Pre-destroy: no Kubernetes namespace resources in state — skipping."
+  fi
+fi
+
 # ── Plan ─────────────────────────────────────────────────────────────────────
 PLAN_FLAGS=( "${VAR_FILES[@]}" -out="${KR_PLAN}" -lock=false -detailed-exitcode )
 if [[ "${TF_COMMAND}" == "destroy" ]]; then

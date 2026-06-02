@@ -325,7 +325,7 @@ module "deploy-kr-eks-cluster" {
 # users, assume-role policies, and EKS access entries.
 # =============================================================================
 module "deploy-kr-iam-cluster-identity" {
-  source = "./module/iam/cluster-identity"
+  source = "./module/iam/cluster/identity"
 
   cluster_identity_roles  = var.cluster_identity_roles
   cluster_identity_groups = var.cluster_identity_groups
@@ -384,5 +384,55 @@ module "deploy-kr-eks-nodegroup" {
     module.deploy-kr-eks-cluster,
     module.deploy-kr-eks-launch-template,
     module.deploy-kr-iam-eks-roles,
+  ]
+}
+
+# =============================================================================
+# EKS Cluster Data Source — deferred read to enforce cluster creation ordering
+# =============================================================================
+# Using depends_on on a data source forces Terraform to defer the read until
+# after the cluster module completes, ensuring the provider is configured with
+# live cluster values and never with a non-existent cluster endpoint.
+data "aws_eks_cluster" "kr_target" {
+  count      = var.eks_enabled ? 1 : 0
+  name       = var.kubernetes_cluster_name
+  depends_on = [module.deploy-kr-eks-cluster]
+}
+
+# =============================================================================
+# Kubernetes Provider Configuration — for EKS cluster access
+# =============================================================================
+# host and cluster_ca_certificate are sourced from the data source above.
+# The data source depends_on the cluster module, guaranteeing the cluster
+# exists before provider configuration is resolved.
+# exec auth generates short-lived tokens at runtime via AWS CLI — compatible
+# with both local (Roles Anywhere) and GitHub Actions (OIDC) execution paths.
+provider "kubernetes" {
+  host                   = var.eks_enabled ? data.aws_eks_cluster.kr_target[0].endpoint : ""
+  cluster_ca_certificate = var.eks_enabled ? base64decode(data.aws_eks_cluster.kr_target[0].certificate_authority[0].data) : ""
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", var.kubernetes_cluster_name]
+    env         = var.auth_mode == "local" ? { AWS_PROFILE = var.aws_profile } : {}
+  }
+}
+
+# =============================================================================
+# EKS Namespace Module — creates Kubernetes namespaces with governance labels
+# =============================================================================
+# Creates Kubernetes namespaces for opted-in clusters after provider readiness.
+# Namespace definitions and labels are sourced from environment/<ENV>/hosting/k8surface.yml
+# and filtered to include only namespaces for active, managed clusters.
+module "deploy-kr-eks-namespaces" {
+  source = "./module/hosting/k8/namespace"
+
+  namespace_map = var.namespace_map
+
+  # Ensure namespaces are created only after cluster and provider are ready
+  depends_on = [
+    module.deploy-kr-eks-cluster,
+    module.deploy-kr-eks-nodegroup,
   ]
 }
