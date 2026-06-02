@@ -58,11 +58,54 @@ Each NACL is bound to its corresponding subnet(s) and acts as the first line of 
 
 | Component | Documentation | Details |
 |---|---|---|
-
 | **Infrastructure** | This README | Network architecture, zone model, NACL configuration, bootstrap setup |
 | **EKS Cluster** | [EKSREADME.md](EKSREADME.md) | Comprehensive guide for EKS cluster creation, configuration, security architecture, compute options, pricing, and troubleshooting. Includes network zoning, IAM identity management, and known limitations. |
 
 ---
+
+## Spec-Driven Development
+
+This repository follows an iteration-based Spec-Driven Development workflow to keep implementation aligned with project conventions while reducing ambiguity in delivery.
+
+### Folder Structure
+
+```text
+.specs/
+  iterations/
+    <iteration-name>/
+      requirements.md
+      plan.md
+      validation.md
+```
+
+Include the feature files for each iteration:
+- requirements.md
+- plan.md
+- validation.md
+
+Also reference .github/copilot-instructions.md to trigger feature build behavior and enforce repository-specific implementation guidance.
+
+### Why this improves project guidelines and reduces token usage
+
+- Creates a single, consistent source of truth for what to build, in what order, and how to verify it.
+- Reinforces existing repository conventions by requiring implementation to follow defined contracts and constraints.
+- Reduces repeated context sharing in every prompt by referencing stable spec files instead of restating full requirements.
+- Lowers token usage by reusing concise requirement and checklist artifacts across planning, implementation, and review.
+
+### Prompt Template
+
+```text
+Look at the feature specification in #file:requirements.md and the implementation checklist in #file:plan.md.
+
+Execute the plan exactly as described.
+1. Create or update the necessary source code as specified in the tasks - requirements.md . Example code is also provided where ever possible . Also look at existing implementation for previously implemented logic
+2. Ensure all naming precisely match the contracts established in the requirements file following existing conventions in the project.
+3. Adhere strictly to the non-negotiable constraints (performance boundaries, security/logging rules) outlined in the spec.
+
+Do not attempt to implement the entire project at once—focus purely on completing the checklist items for this specific iteration. Review your work against our workspace architecture rules.
+
+Post implementation create a review check list in requirements.md which can be  checked post testing
+```
 
 
 ### Traffic Flow: ECT → ICT → RST
