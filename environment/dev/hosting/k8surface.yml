@@ -4,7 +4,10 @@ component:
     cluster :
       - name : kr-carevo-dev-cluster
         role : "kr-carevo-dev-cluster-role"
-        version : "1.30"
+        # https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html
+        # Maintain the Kubernetes version to the latest supported by EKS to ensure access to the latest features and security updates.
+        # !!! Extended support is expensive - last bill us USD 25 for 1 cluster for 2.5 hours operational time for 1.31 in the 12 month window.
+        version : "1.35"
         mode : "managed"
         subnets : [ "kr-carevo-dev-public-subnet-ect", 
                     "kr-carevo-dev-private-subnet-rst",
@@ -37,12 +40,12 @@ component:
               tags: 
                 team: "Carevo DevOps Hosting"
             machine :
-              instance_types: ["t4g.medium", "m6g.large"]
+              instance_types: ["t4g.medium"] # "m6g.large" add only if fails to up spot t4g.medium
               ami_type: "AL2023_ARM_64_STANDARD"
               capacity_type: "SPOT"
             scaling_config:
               desired_size: 1
-              max_size: 3
+              max_size: 1
               min_size: 0
           - name: "kr-carevo-dev-rst-nodegroup"
             description: "Restricted Nodegroup for EKS cluster"
@@ -68,11 +71,44 @@ component:
               tags: 
                 team: "Carevo DevOps Hosting"
             machine :
-              instance_types: ["t4g.medium", "m6g.large"]
+              instance_types: ["t4g.medium"] # "m6g.large" add only if fails to up spot t4g.medium
               ami_type: "AL2023_ARM_64_STANDARD"
               capacity_type: "SPOT"
             scaling_config:
               desired_size: 1
-              max_size: 3
+              max_size: 1
               min_size: 0
-
+        namespace: 
+          - name: "carevo-web-ict-ns"
+            sid : "krce-web-01"
+            description: "Namespace for Carevo internet facing Web applications"
+            labels: 
+              team: "Carevo-Web-Hosting"           
+              environment: "dev"
+              organization: "Krypton"
+              program: "Carevo"
+              application: "KrCE-Web"
+              layer: "Web-Tier"
+              zone: "ict"
+          - name: "carevo-app-rst-ns"
+            sid : "krce-api-01"
+            description: "Namespace for Carevo restricted internal API's ( SOR , Domain)"
+            labels: 
+              team: "Carevo-APP-Hosting"
+              environment: "dev"
+              organization: "Krypton"
+              program: "Carevo"
+              application: "KrCE-Services"
+              layer: "RST-Application-Tier"
+              zone: "rst"
+          - name: "carevo-app-ict-ns"
+            sid : "krce-app-01"
+            description: "Namespace for Carevo controlled internal API's ( Experience API's , Orchestrator / Orchestration API's)"
+            labels: 
+              team: "Carevo-APP-Hosting"              
+              environment: "dev"
+              organization: "Krypton"
+              program: "Carevo"
+              application: "KrCE-Backend"
+              layer: "ICT-Application-Tier"
+              zone: "ict"

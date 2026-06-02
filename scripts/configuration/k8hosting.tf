@@ -109,12 +109,3 @@ variable "namespace_map" {
   }))
   default = {}
 }
-
-# ── Kubernetes Cluster Name ──────────────────────────────────────────────────
-# Name of the EKS cluster for AWS EKS token generation and cluster data source lookup.
-# Sourced from k8surface.yml component.cluster[0].name.
-variable "kubernetes_cluster_name" {
-  description = "Name of the EKS cluster for AWS EKS token generation and cluster data source lookup."
-  type        = string
-  default     = ""
-}

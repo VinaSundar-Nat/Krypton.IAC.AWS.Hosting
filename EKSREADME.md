@@ -59,6 +59,15 @@ component:
         endpoint_private_access: true          # Private API access
 ```
 
+    > IMPORTANT - Kubernetes version lifecycle guidance
+    >
+    > Keep `version` pinned to a Kubernetes release that is currently in standard EKS support to receive the latest fixes, features, and security updates.
+    >
+    > Reference: https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html
+    >
+    > Current version is 1.35 during implementation
+    > Extended support can significantly increase cost. Example from our usage: approximately USD 25 billed for one cluster running Kubernetes 1.31 for around 2.5 hours during the 12-month extended-support window.
+
 **Property Mapping to AWS Resources:**
 
 | YAML Property | AWS Resource | Purpose |

@@ -38,6 +38,14 @@ output "cluster_certificate_authority" {
   sensitive = true
 }
 
+output "cluster_certificate_authority_decoded" {
+  description = "Map of EKS cluster name to base64-decoded certificate authority data for Kubernetes provider configuration"
+  value = {
+    for name, cluster in aws_eks_cluster.kr_cluster : name => base64decode(cluster.certificate_authority[0].data)
+  }
+  sensitive = true
+}
+
 output "clusters" {
   description = "Complete EKS cluster objects"
   value       = aws_eks_cluster.kr_cluster

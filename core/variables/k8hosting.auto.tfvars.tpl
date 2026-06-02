@@ -13,5 +13,11 @@
 # EKS enabled flag — from k8surface.yml component.opt-in
 eks_enabled = REPLACE_EKS_ENABLED
 
+# Kubernetes cluster name for provider lookup — from k8surface.yml component.cluster[0].name
+kubernetes_cluster_name = "REPLACE_KUBERNETES_CLUSTER_NAME"
+
 # EKS cluster configurations with nested nodegroups — from k8surface.yml component.cluster[]
 eks_clusters = REPLACE_EKS_CLUSTERS
+
+# EKS namespace map (flattened from clusters) — from k8surface.yml component.cluster[].namespace[]
+namespace_map = REPLACE_NAMESPACE_MAP
