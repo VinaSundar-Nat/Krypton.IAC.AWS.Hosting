@@ -6,7 +6,7 @@
 
 ## Mission Statement
 
-Krypton is part of a wider platform initiative to move ideas to production with minimal delivery friction while preserving mandatory controls, governance, and security guardrails.
+Krypton AWS IAC is part of a wider platform initiative to move ideas to production with minimal delivery friction while preserving mandatory controls, governance, and security guardrails.
 
 The objective is to provide a reliable, repeatable, and policy-aligned path from feature intent to deployed infrastructure.
 
@@ -17,9 +17,9 @@ Krypton development follows a fully Spec-Driven Development (SDD) model.
 At a high level:
 
 1. Tribes define and refine feature requirements.
-2. Local agent fleets (running across user machines and internal networks) collaborate with tribes and cross-tribe teams to plan delivery.
+2. Local agent fleets (running across user machines - Open claw / Nemo claw and internal networks) collaborate with tribes and cross-tribe teams to plan delivery.
 3. Hosted specialized agents support domain-specific workflows and requirement validation.
-4. Once specifications are finalized, implementation can begin with high autonomy.
+4. Once specifications are finalized, implementation can begin with high autonomy - Harness Layer.
 
 For greenfield initiatives, this model is expected to significantly reduce setup time by accelerating project scaffolding and hosting baseline provisioning.
 
