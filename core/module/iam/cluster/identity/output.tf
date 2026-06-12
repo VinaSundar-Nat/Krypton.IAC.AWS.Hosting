@@ -9,6 +9,13 @@ output "cluster_role_arns" {
   }
 }
 
+output "cluster_role_names" {
+  description = "Map of cluster identity role SID to role name."
+  value = {
+    for k, role in aws_iam_role.kr_cluster_role : local.roles_map[k].sid => role.name
+  }
+}
+
 output "group_arns" {
   description = "Map of cluster identity IAM group name to ARN."
   value = {

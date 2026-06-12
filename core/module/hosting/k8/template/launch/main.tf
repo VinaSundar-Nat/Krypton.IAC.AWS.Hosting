@@ -69,6 +69,13 @@ resource "aws_launch_template" "kr_nodegroup_launch_template" {
     }
   }
 
+  # This is the critical block for IMDSv2 + EKS
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required" # Enforces IMDSv2
+    http_put_response_hop_limit = 2          # Fixes the container boundary drop
+  }
+
   # Monitoring configuration
   monitoring {
     enabled = each.value.nodegroup.template_parameters.monitoring.enabled

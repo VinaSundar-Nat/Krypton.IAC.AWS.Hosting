@@ -320,13 +320,12 @@ _render_cluster_identity_roles() {
     [[ "$role_count" == "0" || "$role_count" == "null" ]] && continue
 
     for j in $(seq 0 1 $((role_count - 1))); do
-      local name sid desc version effect principal action_count actions_hcl
+      local name sid desc version effect action_count actions_hcl principal_count principals_hcl
       name="$(yq "${roles_path}[${j}].name" "${yaml_file}")"
       sid="$(yq "${roles_path}[${j}].sid" "${yaml_file}")"
       desc="$(yq "${roles_path}[${j}].description" "${yaml_file}")"
       version="$(yq "${roles_path}[${j}].template.version" "${yaml_file}")"
       effect="$(yq "${roles_path}[${j}].template.Effect" "${yaml_file}")"
-      principal="$(yq "${roles_path}[${j}].template.Principal" "${yaml_file}")"
 
       action_count="$(yq "${roles_path}[${j}].template.Action | length" "${yaml_file}")"
       actions_hcl="["
@@ -338,8 +337,20 @@ _render_cluster_identity_roles() {
       done
       actions_hcl+="]"
 
+      # Render principals as a list of { type, value } objects
+      principal_count="$(yq "${roles_path}[${j}].template.Principal | length" "${yaml_file}")"
+      principals_hcl="["
+      for k in $(seq 0 1 $((principal_count - 1))); do
+        local p_type p_value
+        p_type="$(yq "${roles_path}[${j}].template.Principal[${k}].type" "${yaml_file}")"
+        p_value="$(yq "${roles_path}[${j}].template.Principal[${k}].value" "${yaml_file}")"
+        [[ $k -gt 0 ]] && principals_hcl+=", "
+        principals_hcl+="{ type = \"${p_type}\", value = \"${p_value}\" }"
+      done
+      principals_hcl+="]"
+
       [[ "${first}" == "true" ]] || hcl+=","
-      hcl+=$'\n'"    { cluster_name = \"${cluster_name}\", name = \"${name}\", sid = \"${sid}\", description = \"${desc}\", version = \"${version}\", effect = \"${effect}\", actions = ${actions_hcl}, principal = \"${principal}\" }"
+      hcl+=$'\n'"    { cluster_name = \"${cluster_name}\", name = \"${name}\", sid = \"${sid}\", description = \"${desc}\", version = \"${version}\", effect = \"${effect}\", actions = ${actions_hcl}, principals = ${principals_hcl} }"
       first=false
     done
   done
@@ -440,6 +451,68 @@ _render_cluster_identity_users() {
   echo "${hcl}"
 }
 
+# ── Pod Identity ─────────────────────────────────────────────────────────────
+# Sourced from identity.yml component.cluster_identity[].pod_identity.
+# Cross-references cluster_identity[].roles[] to resolve role names from sids.
+_render_pod_identity() {
+  local yaml_file="$1"
+  local yq_path="${SEL} | .cluster_identity"
+  local ci_count
+  ci_count="$(yq "${yq_path} | length" "${yaml_file}")"
+  [[ "$ci_count" == "0" || "$ci_count" == "null" ]] \
+    && echo '{ required = false, cluster_name = "", roles = [] }' && return
+
+  # Use first cluster_identity block
+  local cluster_name pi_path
+  cluster_name="$(yq "${yq_path}[0].cluster" "${yaml_file}")"
+  pi_path="${yq_path}[0].pod_identity"
+
+  local required
+  required="$(yq "${pi_path}.required" "${yaml_file}")"
+  [[ -z "$required" || "$required" == "null" ]] && required="false"
+
+  local role_count
+  role_count="$(yq "${pi_path}.roles | length" "${yaml_file}")"
+  if [[ "$role_count" == "0" || "$role_count" == "null" ]]; then
+    echo "{ required = ${required}, cluster_name = \"${cluster_name}\", roles = [] }"
+    return
+  fi
+
+  local roles_hcl="["
+  local first=true
+  for i in $(seq 0 1 $((role_count - 1))); do
+    local role_sid role_name desc sa_name sa_ns pol_count pol_hcl
+
+    role_sid="$(yq "${pi_path}.roles[${i}].role" "${yaml_file}")"
+    desc="$(yq "${pi_path}.roles[${i}].description" "${yaml_file}")"
+    sa_name="$(yq "${pi_path}.roles[${i}].service_account.name" "${yaml_file}")"
+    sa_ns="$(yq "${pi_path}.roles[${i}].service_account.namespace" "${yaml_file}")"
+
+    # Resolve full role name from cluster_identity[].roles[] matching the sid
+    role_name="$(yq "${yq_path}[0].roles[] | select(.sid == \"${role_sid}\") | .name" "${yaml_file}")"
+    [[ -z "$role_name" || "$role_name" == "null" ]] && role_name=""
+
+    # Build policy list
+    pol_count="$(yq "${pi_path}.roles[${i}].policy | length" "${yaml_file}")"
+    pol_hcl="["
+    for j in $(seq 0 1 $((pol_count - 1))); do
+      local tmpl_loc pol_name
+      tmpl_loc="$(yq "${pi_path}.roles[${i}].policy[${j}].template_location" "${yaml_file}")"
+      pol_name="$(yq "${pi_path}.roles[${i}].policy[${j}].name" "${yaml_file}")"
+      [[ $j -gt 0 ]] && pol_hcl+=", "
+      pol_hcl+="{ template_location = \"${tmpl_loc}\", name = \"${pol_name}\" }"
+    done
+    pol_hcl+="]"
+
+    [[ "${first}" == "true" ]] || roles_hcl+=","
+    roles_hcl+=$'\n'"    { role = \"${role_sid}\", role_name = \"${role_name}\", description = \"${desc}\", policy = ${pol_hcl}, service_account = { name = \"${sa_name}\", namespace = \"${sa_ns}\" } }"
+    first=false
+  done
+  roles_hcl+=$'\n'"  ]"
+
+  echo "{ required = ${required}, cluster_name = \"${cluster_name}\", roles = ${roles_hcl} }"
+}
+
 IAM_POLICIES="$(_render_iam_policies         "${IDENTITY_YAML}")"
 IAM_GROUPS="$(_render_iam_groups             "${IDENTITY_YAML}")"
 IAM_USERS="$(_render_iam_users               "${IDENTITY_YAML}")"
@@ -451,6 +524,7 @@ CLUSTER_ACCESS="$(_render_cluster_access     "${IDENTITY_YAML}")"
 CLUSTER_IDENTITY_ROLES="$(_render_cluster_identity_roles   "${IDENTITY_YAML}")"
 CLUSTER_IDENTITY_GROUPS="$(_render_cluster_identity_groups "${IDENTITY_YAML}")"
 CLUSTER_IDENTITY_USERS="$(_render_cluster_identity_users   "${IDENTITY_YAML}")"
+POD_IDENTITY="$(_render_pod_identity "${IDENTITY_YAML}")"
 
 # ── Write identity.auto.tfvars from master template ───────────────────────────
 ID_DEST="${OUT_DIR}/identity.auto.tfvars"
@@ -467,4 +541,5 @@ _sub "${ID_DEST}" "REPLACE_CLUSTER_ACCESS"    "${CLUSTER_ACCESS}"
 _sub "${ID_DEST}" "REPLACE_CLUSTER_IDENTITY_ROLES"  "${CLUSTER_IDENTITY_ROLES}"
 _sub "${ID_DEST}" "REPLACE_CLUSTER_IDENTITY_GROUPS" "${CLUSTER_IDENTITY_GROUPS}"
 _sub "${ID_DEST}" "REPLACE_CLUSTER_IDENTITY_USERS"  "${CLUSTER_IDENTITY_USERS}"
+_sub "${ID_DEST}" "REPLACE_POD_IDENTITY"            "${POD_IDENTITY}"
 echo "Written: ${ID_DEST}"

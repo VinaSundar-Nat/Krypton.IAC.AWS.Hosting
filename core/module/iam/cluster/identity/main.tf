@@ -60,6 +60,12 @@ locals {
       u.role_key == role_key ? (length(u.k8group) > 0 ? u.k8group : ["system:masters"]) : []
     ]))
   }
+
+  # Scope-filtered map: only roles with sid prefixed "lbc-" are candidates for Pod Identity.
+  lbc_roles_map = {
+    for k, r in local.roles_map : k => r
+    if startswith(r.sid, "lbc-")
+  }
 }
 
 data "aws_iam_policy_document" "kr_cluster_role_assume_role_policy" {
@@ -71,11 +77,16 @@ data "aws_iam_policy_document" "kr_cluster_role_assume_role_policy" {
     effect  = each.value.effect
     actions = each.value.actions
 
-    principals {
-      type = "AWS"
-      identifiers = [
-        replace(each.value.principal, "$${account_id}", data.aws_caller_identity.current.account_id)
-      ]
+    dynamic "principals" {
+      for_each = each.value.principals
+      content {
+        type = principals.value.type
+        identifiers = [
+          principals.value.type == "AWS"
+          ? replace(principals.value.value, "$${account_id}", data.aws_caller_identity.current.account_id)
+          : principals.value.value
+        ]
+      }
     }
   }
 }
@@ -190,11 +201,11 @@ resource "aws_iam_user_group_membership" "kr_user_group_membership" {
 resource "aws_eks_access_entry" "kr_cluster_access_entry" {
   for_each = local.roles_map
 
-  cluster_name      = each.value.cluster_name
-  principal_arn     = aws_iam_role.kr_cluster_role[each.key].arn
-  type              = "STANDARD"
-  
-#   kubernetes_groups = length(local.role_kubernetes_groups[each.key]) > 0 ? local.role_kubernetes_groups[each.key] : ["system:masters"]
+  cluster_name  = each.value.cluster_name
+  principal_arn = aws_iam_role.kr_cluster_role[each.key].arn
+  type          = "STANDARD"
+
+  #   kubernetes_groups = length(local.role_kubernetes_groups[each.key]) > 0 ? local.role_kubernetes_groups[each.key] : ["system:masters"]
 
   tags = merge(
     var.common_tags,

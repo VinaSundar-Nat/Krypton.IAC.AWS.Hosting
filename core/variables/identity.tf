@@ -162,7 +162,8 @@ variable "cluster_access" {
 variable "cluster_identity_roles" {
   description = <<-EOT
     List of cluster identity IAM role definitions from identity.yml component.cluster_identity[].roles[].
-    principal may include the literal "$${account_id}" placeholder, replaced at apply time.
+    principals is a list of { type, value } objects supporting both AWS and Service principal types.
+    For AWS type principals, value may include the literal "$${account_id}" placeholder, replaced at apply time.
     sid is used by groups (assume_role) to map to the target role.
   EOT
   type = list(object({
@@ -173,7 +174,10 @@ variable "cluster_identity_roles" {
     version      = string
     effect       = string
     actions      = list(string)
-    principal    = string
+    principals = list(object({
+      type  = string
+      value = string
+    }))
   }))
   default = []
 }
@@ -216,4 +220,38 @@ variable "cluster_identity_users" {
     description   = string
   }))
   default = []
+}
+
+# ── Pod Identity ─────────────────────────────────────────────────────────────
+# Pod Identity configuration for EKS cluster workloads.
+# Sourced from identity.yml component.cluster_identity[].pod_identity.
+variable "pod_identity" {
+  description = <<-EOT
+    Pod Identity configuration sourced from identity.yml component.cluster_identity[].pod_identity.
+    required: true enables Pod Identity add-on and association provisioning.
+    cluster_name: EKS cluster to associate Pod Identity with.
+    roles: list of Pod Identity role mappings (lbc-* scoped) with policy and service account definitions.
+  EOT
+  type = object({
+    required     = bool
+    cluster_name = string
+    roles = list(object({
+      role        = string
+      role_name   = string
+      description = string
+      policy = list(object({
+        template_location = string
+        name              = string
+      }))
+      service_account = object({
+        name      = string
+        namespace = string
+      })
+    }))
+  })
+  default = {
+    required     = false
+    cluster_name = ""
+    roles        = []
+  }
 }

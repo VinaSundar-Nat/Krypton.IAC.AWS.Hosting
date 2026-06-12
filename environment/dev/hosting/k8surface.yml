@@ -90,6 +90,8 @@ component:
               application: "KrCE-Web"
               layer: "Web-Tier"
               zone: "ict"
+              krce-prv-alb-associated: "false"
+              krce-pub-alb-associated: "true"
           - name: "carevo-app-rst-ns"
             sid : "krce-api-01"
             description: "Namespace for Carevo restricted internal API's ( SOR , Domain)"
@@ -101,6 +103,8 @@ component:
               application: "KrCE-Services"
               layer: "RST-Application-Tier"
               zone: "rst"
+              krce-prv-alb-associated: "true"
+              krce-pub-alb-associated: "false"
           - name: "carevo-app-ict-ns"
             sid : "krce-app-01"
             description: "Namespace for Carevo controlled internal API's ( Experience API's , Orchestrator / Orchestration API's)"
@@ -112,3 +116,67 @@ component:
               application: "KrCE-Backend"
               layer: "ICT-Application-Tier"
               zone: "ict"
+              krce-prv-alb-associated: "true"
+              krce-pub-alb-associated: "false"
+          - name: "carevo-infra-ns"
+            sid : "krce-infra-01"
+            description: "Namespace for Carevo infrastructure components"
+            labels: 
+              team: "Krypton-Infra-Hosting"              
+              environment: "dev"
+              organization: "Krypton"
+              program: "Carevo"
+              application: "KrCE-Infra"
+              layer: "Infra"
+              zone: ""
+              krce-prv-alb-associated: ""
+              krce-pub-alb-associated: ""
+        lbc:
+          - name: "kr-carevo-dev-lbc"
+            description: "Load Balancer Controller for EKS cluster"
+            namespace: "kube-system"
+            service_account:
+              name: "kr-carevo-dev-lbc-sa"
+              create: false
+            gateway_manifests:
+                gc_name: "kr-carevo-dev-alb"
+                gateway:
+                  - name: "kr-carevo-dev-public-alb-gateway"
+                    gateway_class: "kr-carevo-dev-alb"
+                    description: "Gateway for ALB Ingress Controller"
+                    namespace: "carevo-infra-ns"
+                    annotations: 
+                      alb.ingress.kubernetes.io/scheme: "internet-facing"
+                      alb.ingress.kubernetes.io/target-type: "ip"
+                    ports:
+                      - name: "http"
+                        port: 80
+                        protocol: "HTTP"
+                      - name: "https"
+                        port: 443
+                        protocol: "HTTPS"                  
+                    matches: [{
+                          name: "krce-pub-alb-associated",
+                          value: true
+                        }]
+                  - name: "kr-carevo-dev-private-alb-gateway"
+                    gateway_class: "kr-carevo-dev-alb"
+                    description: "Gateway for ALB Ingress Controller"
+                    namespace: "carevo-infra-ns"
+                    annotations: 
+                      alb.ingress.kubernetes.io/scheme: "internal"
+                      alb.ingress.kubernetes.io/target-type: "ip"
+                    ports:
+                      - name: "http"
+                        port: 80
+                        protocol: "HTTP"
+                      - name: "https"
+                        port: 443
+                        protocol: "HTTPS"                  
+                    matches: [{
+                          name: "krce-prv-alb-associated",
+                          value: true
+                        }]
+
+
+              

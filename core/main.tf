@@ -407,15 +407,43 @@ data "aws_eks_cluster" "kr_target" {
 # exists before provider configuration is resolved.
 # exec auth generates short-lived tokens at runtime via AWS CLI — compatible
 # with both local (Roles Anywhere) and GitHub Actions (OIDC) execution paths.
+#
+# When eks_enabled=true, safely access the cluster endpoint using try() to handle
+# cases where the data source may not be fully populated yet.
 provider "kubernetes" {
-  host                   = var.eks_enabled ? data.aws_eks_cluster.kr_target[0].endpoint : ""
-  cluster_ca_certificate = var.eks_enabled ? base64decode(data.aws_eks_cluster.kr_target[0].certificate_authority[0].data) : ""
+  host                   = var.eks_enabled ? try(data.aws_eks_cluster.kr_target[0].endpoint, "") : ""
+  cluster_ca_certificate = var.eks_enabled ? try(base64decode(data.aws_eks_cluster.kr_target[0].certificate_authority[0].data), "") : ""
 
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", var.kubernetes_cluster_name]
-    env         = var.auth_mode == "local" ? { AWS_PROFILE = var.aws_profile } : {}
+  dynamic "exec" {
+    for_each = var.eks_enabled ? [1] : []
+    content {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", var.kubernetes_cluster_name]
+      env         = var.auth_mode == "local" ? { AWS_PROFILE = var.aws_profile } : {}
+    }
+  }
+}
+
+# =============================================================================
+# Helm Provider Configuration — for Kubernetes package management
+# =============================================================================
+# Mirrors the Kubernetes provider auth pattern: exec-based token generation
+# supports both local (IAM Roles Anywhere) and GHA (OIDC) execution paths.
+provider "helm" {
+  kubernetes {
+    host                   = var.eks_enabled ? try(data.aws_eks_cluster.kr_target[0].endpoint, "") : ""
+    cluster_ca_certificate = var.eks_enabled ? try(base64decode(data.aws_eks_cluster.kr_target[0].certificate_authority[0].data), "") : ""
+
+    dynamic "exec" {
+      for_each = var.eks_enabled ? [1] : []
+      content {
+        api_version = "client.authentication.k8s.io/v1beta1"
+        command     = "aws"
+        args        = ["eks", "get-token", "--cluster-name", var.kubernetes_cluster_name]
+        env         = var.auth_mode == "local" ? { AWS_PROFILE = var.aws_profile } : {}
+      }
+    }
   }
 }
 
@@ -425,10 +453,15 @@ provider "kubernetes" {
 # Creates Kubernetes namespaces for opted-in clusters after provider readiness.
 # Namespace definitions and labels are sourced from environment/<ENV>/hosting/k8surface.yml
 # and filtered to include only namespaces for active, managed clusters.
+# Also creates service accounts for Pod Identity-enabled workloads (e.g. LBC).
 module "deploy-kr-eks-namespaces" {
   source = "./module/hosting/k8/namespace"
 
-  namespace_map = var.namespace_map
+  eks_enabled      = var.eks_enabled
+  namespace_map    = var.namespace_map
+  service_accounts = var.pod_identity.required ? [
+    for r in var.pod_identity.roles : r.service_account
+  ] : []
 
   # Ensure namespaces are created only after cluster and provider are ready
   depends_on = [
@@ -436,3 +469,74 @@ module "deploy-kr-eks-namespaces" {
     module.deploy-kr-eks-nodegroup,
   ]
 }
+
+# =============================================================================
+# IAM Cluster ALB Module — creates LBC IAM policy, attachment, and Pod Identity
+# association linking the IAM role to the Kubernetes service account.
+# =============================================================================
+module "deploy-kr-iam-cluster-alb" {
+  source = "./module/iam/cluster/alb"
+
+  pod_identity      = var.pod_identity
+  cluster_role_arns = module.deploy-kr-iam-cluster-identity.cluster_role_arns
+
+  common_tags = {
+    Team = "Carevo DevOps IAM"
+  }
+
+  depends_on = [
+    module.deploy-kr-iam-cluster-identity,
+    module.deploy-kr-eks-namespaces,
+  ]
+}
+
+# =============================================================================
+# EKS Addons Module — provisions the eks-pod-identity-agent add-on
+# =============================================================================
+module "deploy-kr-eks-addons" {
+  source = "./module/hosting/k8/addons"
+
+  eks_enabled           = var.eks_enabled
+  cluster_name          = var.kubernetes_cluster_name
+  pod_identity_required = var.pod_identity.required
+
+  depends_on = [
+    module.deploy-kr-eks-cluster,
+    module.deploy-kr-eks-nodegroup,
+  ]
+}
+
+# =============================================================================
+# EKS ALB Module — deploys the AWS Load Balancer Controller via Helm
+# =============================================================================
+module "deploy-kr-eks-alb" {
+  source = "./module/hosting/k8/alb"
+
+  eks_enabled  = var.eks_enabled
+  cluster_name = var.kubernetes_cluster_name
+  lbc          = var.lbc
+  aws_region   = var.aws_region
+  vpc_id       = module.deploy-kr-vpc.kr_vpc_id
+
+  depends_on = [
+    module.deploy-kr-eks-namespaces,
+    module.deploy-kr-iam-cluster-alb,
+    module.deploy-kr-eks-addons,
+  ]
+}
+
+# =============================================================================
+# EKS Manifests Module — creates Gateway Class and Gateway resources
+# =============================================================================
+module "deploy-kr-eks-manifests" {
+  source = "./module/hosting/k8/manifests"
+
+  eks_enabled       = var.eks_enabled
+  gateway_manifests = var.gateway_manifests
+
+  depends_on = [
+    module.deploy-kr-eks-alb,
+    module.deploy-kr-eks-namespaces,
+  ]
+}
+

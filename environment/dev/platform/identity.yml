@@ -113,14 +113,36 @@ component:
         roles:
           - name: "kr-carevo-dev-cluster-adm-role"
             sid: "adm-01"
-            description: "IAM role for EKS Cluster Admin access via aws-auth configmap"           
+            description: "IAM role for EKS Cluster Admin access via aws-auth configmap"         
             template:  {
               version: "2012-10-17",
               Effect: "Allow",
               Action: [
                 "sts:AssumeRole"
               ],
-              Principal: "arn:aws:iam::$${account_id}:root"
+              Principal: [
+                 {
+                   type: "AWS",
+                   value: "arn:aws:iam::$${account_id}:root"
+                 }
+              ]              
+            }
+          - name: "kr-carevo-dev-cluster-lbc-role"
+            sid: "lbc-01"
+            description: "IAM role for EKS Cluster Load Balancer Controller"          
+            template: {
+              version: "2012-10-17",
+              Effect: "Allow",
+              Action: [
+                "sts:AssumeRole",
+                "sts:TagSession"
+              ],
+              Principal: [
+                 {
+                   type: "Service",
+                   value: "pods.eks.amazonaws.com"
+                 }
+              ]
             }
         groups:
           - name: "kr-carevo-dev-cluster-adm-group"
@@ -140,5 +162,16 @@ component:
                 policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
                 k8group: ["system:masters"]
                 description: "IAM user for EKS Admins"
+        pod_identity:
+          required: true
+          roles:
+            - role: "lbc-01"  
+              policy:
+                - template_location: "loadbalancer.json"
+                  name: "kr-carevo-dev-lbc-pod-identity-policy"                 
+              description: "IAM role policy mapping to EKS POD Identity for Load Balancer Controller"
+              service_account:
+                name: "kr-carevo-dev-lbc-sa"
+                namespace: "kube-system"
 
       

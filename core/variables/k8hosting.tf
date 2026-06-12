@@ -100,6 +100,8 @@ variable "namespace_map" {
     Map of namespace configurations keyed by cluster_name:namespace_name.
     Extracted from eks_clusters[].namespace[] for deterministic namespace creation.
     Each namespace includes name, description, and labels for governance.
+    Standard labels: team, environment, organization, program, application, layer, zone.
+    ALB association labels: krce-prv-alb-associated, krce-pub-alb-associated ("true"/"false").
   EOT
   type = map(object({
     cluster_name = string
@@ -117,4 +119,62 @@ variable "kubernetes_cluster_name" {
   description = "Name of the EKS cluster for AWS EKS token generation and cluster data source lookup."
   type        = string
   default     = ""
+}
+
+# ── Load Balancer Controller ─────────────────────────────────────────────────
+# AWS Load Balancer Controller Helm release configuration.
+# Sourced from k8surface.yml component.cluster[].lbc[].
+variable "lbc" {
+  description = <<-EOT
+    Load Balancer Controller Helm release configuration from k8surface.yml component.cluster[].lbc[].
+    name            - Helm release name.
+    description     - Human-readable description.
+    namespace       - Target Kubernetes namespace for the Helm release.
+    service_account - Service account name and create flag.
+  EOT
+  type = list(object({
+    name        = string
+    description = string
+    namespace   = string
+    service_account = object({
+      name   = string
+      create = bool
+    })
+  }))
+  default = []
+}
+
+# ── Gateway Manifests ────────────────────────────────────────────────────────
+# Gateway Class and Gateway resource definitions for ALB routing.
+# Sourced from k8surface.yml component.cluster[].lbc[].gateway_manifests.
+variable "gateway_manifests" {
+  description = <<-EOT
+    Gateway Class and Gateway resource configuration from k8surface.yml
+    component.cluster[].lbc[].gateway_manifests.
+    gc_name  - GatewayClass resource name (ALB controller integration point).
+    gateway  - List of Gateway resource definitions with listeners and namespace selectors.
+  EOT
+  type = object({
+    gc_name = string
+    gateway = list(object({
+      name          = string
+      gateway_class = string
+      description   = string
+      namespace     = string
+      annotations   = map(string)
+      ports = list(object({
+        name     = string
+        port     = number
+        protocol = string
+      }))
+      matches = list(object({
+        name  = string
+        value = bool
+      }))
+    }))
+  })
+  default = {
+    gc_name = ""
+    gateway = []
+  }
 }
