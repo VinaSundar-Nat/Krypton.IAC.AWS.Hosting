@@ -53,4 +53,9 @@ resource "helm_release" "kr_load_balancer_controller" {
     value = var.vpc_id
   }
 
+  set {
+    name  = "replicaCount"
+    value = tostring(local.lbc_config.replica_count)
+  }
+
 }
