@@ -43,3 +43,6 @@ cluster_identity_groups = REPLACE_CLUSTER_IDENTITY_GROUPS
 
 # Cluster identity users — from identity.yml component.cluster_identity[].groups[].users[]
 cluster_identity_users = REPLACE_CLUSTER_IDENTITY_USERS
+
+# Pod Identity configuration — from identity.yml component.cluster_identity[].pod_identity
+pod_identity = REPLACE_POD_IDENTITY

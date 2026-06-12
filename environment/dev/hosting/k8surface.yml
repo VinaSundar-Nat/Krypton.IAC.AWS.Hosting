@@ -90,6 +90,8 @@ component:
               application: "KrCE-Web"
               layer: "Web-Tier"
               zone: "ict"
+              krce-prv-alb-associated: "false"
+              krce-pub-alb-associated: "true"
           - name: "carevo-app-rst-ns"
             sid : "krce-api-01"
             description: "Namespace for Carevo restricted internal API's ( SOR , Domain)"
@@ -101,6 +103,8 @@ component:
               application: "KrCE-Services"
               layer: "RST-Application-Tier"
               zone: "rst"
+              krce-prv-alb-associated: "true"
+              krce-pub-alb-associated: "false"
           - name: "carevo-app-ict-ns"
             sid : "krce-app-01"
             description: "Namespace for Carevo controlled internal API's ( Experience API's , Orchestrator / Orchestration API's)"
@@ -112,3 +116,28 @@ component:
               application: "KrCE-Backend"
               layer: "ICT-Application-Tier"
               zone: "ict"
+              krce-prv-alb-associated: "true"
+              krce-pub-alb-associated: "false"
+          - name: "carevo-infra-ns"
+            sid : "krce-infra-01"
+            description: "Namespace for Carevo infrastructure components"
+            labels: 
+              team: "Krypton-Infra-Hosting"              
+              environment: "dev"
+              organization: "Krypton"
+              program: "Carevo"
+              application: "KrCE-Infra"
+              layer: "Infra"
+              zone: ""
+              krce-prv-alb-associated: ""
+              krce-pub-alb-associated: ""
+        lbc:
+          - name: "kr-carevo-dev-lbc"
+            description: "Load Balancer Controller for EKS cluster"
+            namespace: "kube-system"
+            service_account:
+              name: "kr-carevo-dev-lbc-sa"
+              create: false
+            
+
+              

@@ -21,3 +21,6 @@ eks_clusters = REPLACE_EKS_CLUSTERS
 
 # EKS namespace map (flattened from clusters) — from k8surface.yml component.cluster[].namespace[]
 namespace_map = REPLACE_NAMESPACE_MAP
+
+# Load Balancer Controller Helm config — from k8surface.yml component.cluster[].lbc[]
+lbc = REPLACE_LBC

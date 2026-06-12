@@ -15,7 +15,10 @@ variable "cluster_identity_roles" {
     version      = string
     effect       = string
     actions      = list(string)
-    principal    = string
+    principals = list(object({
+      type  = string
+      value = string
+    }))
   }))
   default = []
 }

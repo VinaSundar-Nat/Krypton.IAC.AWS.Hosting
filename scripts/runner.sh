@@ -153,6 +153,15 @@ VAR_FILES=( -var-file=variables/network.auto.tfvars
   -var-file=variables/k8hosting.auto.tfvars
   )
 
+# During full destroy, force Kubernetes/Helm-managed inputs to empty values.
+# This prevents provider initialization failures when the cluster is absent or
+# when cluster-dependent resources were already cleaned from state.
+DESTROY_K8S_DISABLE_FLAGS=(
+  -var 'namespace_map={}'
+  -var 'lbc=[]'
+  -var 'pod_identity={required=false,cluster_name="",roles=[]}'
+)
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo " terraform init (local — local backend)"
@@ -168,10 +177,43 @@ terraform init
 #   1. Cluster still live  → targeted terraform destroy (API call, clean removal)
 #   2. Cluster already gone → terraform state rm (drops orphaned state, no API needed)
 if [[ "${TF_COMMAND}" == "destroy" ]]; then
-  if terraform state list module.deploy-kr-eks-namespaces 2>/dev/null | grep -q .; then
+  K8S_STATE_MODULES=(
+    module.deploy-kr-eks-namespaces
+    module.deploy-kr-eks-alb
+  )
+
+  HAS_K8S_STATE=false
+  for mod in "${K8S_STATE_MODULES[@]}"; do
+    if terraform state list "${mod}" >/dev/null 2>&1; then
+      HAS_K8S_STATE=true
+      break
+    fi
+  done
+
+  if [[ "${HAS_K8S_STATE}" == "true" ]]; then
     # Read the cluster name written by replace-vars.sh into k8hosting.auto.tfvars
     K8S_CLUSTER_NAME="$(grep 'kubernetes_cluster_name' variables/k8hosting.auto.tfvars \
       | sed 's/.*= *"\(.*\)"/\1/')"
+    EKS_ENABLED_IN_VARS=false
+    if grep -q 'eks_enabled *= *true' variables/k8hosting.auto.tfvars 2>/dev/null; then
+      EKS_ENABLED_IN_VARS=true
+    fi
+
+    # If EKS is disabled (or cluster name is empty), provider config will fall back
+    # to localhost during destroy. In that case, remove namespace state directly.
+    if [[ "${EKS_ENABLED_IN_VARS}" != "true" || -z "${K8S_CLUSTER_NAME}" ]]; then
+      echo ""
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo " Pre-destroy: EKS disabled or cluster name missing in tfvars."
+      echo " Removing Kubernetes/Helm module state to avoid localhost provider fallback."
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      for mod in "${K8S_STATE_MODULES[@]}"; do
+        if terraform state list "${mod}" >/dev/null 2>&1; then
+          terraform state rm "${mod}"
+        fi
+      done
+      K8S_CLUSTER_NAME=""
+    fi
 
     # Check whether the cluster API is still reachable in AWS
     CLUSTER_EXISTS=false
@@ -186,38 +228,50 @@ if [[ "${TF_COMMAND}" == "destroy" ]]; then
     if [[ "${CLUSTER_EXISTS}" == "true" ]]; then
       echo ""
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-      echo " Pre-destroy: Kubernetes namespaces (targeted — cluster live)"
+      echo " Pre-destroy: Kubernetes/Helm modules (targeted — cluster live)"
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       set +e
       terraform destroy \
         "${VAR_FILES[@]}" \
+        "${DESTROY_K8S_DISABLE_FLAGS[@]}" \
+        -target=module.deploy-kr-eks-alb \
         -target=module.deploy-kr-eks-namespaces \
         -lock=false \
         -auto-approve
       NS_DESTROY_EXIT=$?
       set -e
       if [[ ${NS_DESTROY_EXIT} -ne 0 ]]; then
-        echo "ERROR: Targeted namespace destroy failed (exit ${NS_DESTROY_EXIT})." >&2
-        exit "${NS_DESTROY_EXIT}"
+        echo "WARNING: Targeted Kubernetes/Helm destroy failed (exit ${NS_DESTROY_EXIT})." >&2
+        echo "         Falling back to state cleanup for Kubernetes/Helm modules." >&2
+        for mod in "${K8S_STATE_MODULES[@]}"; do
+          if terraform state list "${mod}" >/dev/null 2>&1; then
+            terraform state rm "${mod}"
+          fi
+        done
       fi
     else
       echo ""
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       echo " Pre-destroy: EKS cluster '${K8S_CLUSTER_NAME}' not found in AWS."
-      echo " Removing orphaned namespace state entries (no API call needed)."
+      echo " Removing orphaned Kubernetes/Helm state entries (no API call needed)."
       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-      terraform state rm module.deploy-kr-eks-namespaces
+      for mod in "${K8S_STATE_MODULES[@]}"; do
+        if terraform state list "${mod}" >/dev/null 2>&1; then
+          terraform state rm "${mod}"
+        fi
+      done
     fi
   else
     echo ""
-    echo "Pre-destroy: no Kubernetes namespace resources in state — skipping."
+    echo "Pre-destroy: no Kubernetes/Helm resources in state — skipping."
   fi
 fi
 
 # ── Plan ─────────────────────────────────────────────────────────────────────
-PLAN_FLAGS=( "${VAR_FILES[@]}" -out="${KR_PLAN}" -lock=false -detailed-exitcode )
+PLAN_FLAGS=( "${VAR_FILES[@]}" -out="${KR_PLAN}" -lock=false -detailed-exitcode -refresh=false )
 if [[ "${TF_COMMAND}" == "destroy" ]]; then
   PLAN_FLAGS+=( -destroy )
+  PLAN_FLAGS+=( "${DESTROY_K8S_DISABLE_FLAGS[@]}" )
 fi
 
 echo ""
@@ -254,7 +308,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo " terraform apply $(basename "${KR_PLAN}")"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-terraform apply -input=false -auto-approve "${KR_PLAN}"
+terraform apply -input=false -auto-approve -refresh=false "${KR_PLAN}"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

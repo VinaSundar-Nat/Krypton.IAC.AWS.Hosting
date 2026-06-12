@@ -36,7 +36,7 @@ _render_tags() {
     local val
     val="$(yq "${yq_path}[\"${key}\"]" "${yaml_file}")"
     [[ "${first}" == "true" ]] || hcl+=","
-    hcl+=$'\n'"    ${key} = \"${val}\""
+    hcl+=$'\n'"    \"${key}\" = \"${val}\""
     first=false
   done <<< "$(yq "${yq_path} | keys | .[]" "${yaml_file}" 2>/dev/null || true)"
   hcl+=$'\n'"  }"
@@ -323,6 +323,42 @@ EKS_CLUSTERS="$(_render_eks_clusters "${K8HOSTING_YAML}")"
 # Render namespace map (flattened)
 NAMESPACE_MAP="$(_render_namespace_map "${K8HOSTING_YAML}")"
 
+# Render LBC configuration (first cluster, first lbc entry)
+_render_lbc() {
+  local yaml_file="$1"
+  local yq_path="${SEL} | .cluster"
+  local cluster_count
+  cluster_count="$(yq "${yq_path} | length" "${yaml_file}")"
+  [[ "$cluster_count" == "0" || "$cluster_count" == "null" ]] && echo "[]" && return
+
+  local hcl="["
+  local first=true
+  for i in $(seq 0 1 $((cluster_count - 1))); do
+    local lbc_path="${yq_path}[${i}].lbc"
+    local lbc_count
+    lbc_count="$(yq "${lbc_path} | length" "${yaml_file}" 2>/dev/null || echo 0)"
+    [[ "$lbc_count" == "0" || "$lbc_count" == "null" ]] && continue
+
+    for j in $(seq 0 1 $((lbc_count - 1))); do
+      local lbc_name lbc_desc lbc_ns sa_name sa_create
+      lbc_name="$(yq "${lbc_path}[${j}].name" "${yaml_file}")"
+      lbc_desc="$(yq "${lbc_path}[${j}].description" "${yaml_file}")"
+      lbc_ns="$(yq "${lbc_path}[${j}].namespace" "${yaml_file}")"
+      sa_name="$(yq "${lbc_path}[${j}].service_account.name" "${yaml_file}")"
+      sa_create="$(yq "${lbc_path}[${j}].service_account.create" "${yaml_file}")"
+      [[ -z "$sa_create" || "$sa_create" == "null" ]] && sa_create="false"
+
+      [[ "${first}" == "true" ]] || hcl+=","
+      hcl+=$'\n'"    { name = \"${lbc_name}\", description = \"${lbc_desc}\", namespace = \"${lbc_ns}\", service_account = { name = \"${sa_name}\", create = ${sa_create} } }"
+      first=false
+    done
+  done
+  hcl+=$'\n'"  ]"
+  echo "${hcl}"
+}
+
+LBC="$(_render_lbc "${K8HOSTING_YAML}")"
+
 # ── Write k8hosting.auto.tfvars from master template ──────────────────────────
 K8_DEST="${OUT_DIR}/k8hosting.auto.tfvars"
 cp "${OUT_DIR}/k8hosting.auto.tfvars.tpl" "${K8_DEST}"
@@ -331,4 +367,5 @@ _sub "${K8_DEST}" "REPLACE_EKS_ENABLED" "${EKS_ENABLED}"
 _sub "${K8_DEST}" "REPLACE_KUBERNETES_CLUSTER_NAME" "${KUBERNETES_CLUSTER_NAME}"
 _sub "${K8_DEST}" "REPLACE_EKS_CLUSTERS" "${EKS_CLUSTERS}"
 _sub "${K8_DEST}" "REPLACE_NAMESPACE_MAP" "${NAMESPACE_MAP}"
+_sub "${K8_DEST}" "REPLACE_LBC" "${LBC}"
 echo "Written: ${K8_DEST}"
