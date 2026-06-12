@@ -130,12 +130,14 @@ variable "lbc" {
     name            - Helm release name.
     description     - Human-readable description.
     namespace       - Target Kubernetes namespace for the Helm release.
+    replica_count   - Replica count for the Helm chart.
     service_account - Service account name and create flag.
   EOT
   type = list(object({
     name        = string
     description = string
     namespace   = string
+    replica_count = number
     service_account = object({
       name   = string
       create = bool

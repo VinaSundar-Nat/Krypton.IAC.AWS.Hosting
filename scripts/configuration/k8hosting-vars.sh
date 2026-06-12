@@ -340,16 +340,18 @@ _render_lbc() {
     [[ "$lbc_count" == "0" || "$lbc_count" == "null" ]] && continue
 
     for j in $(seq 0 1 $((lbc_count - 1))); do
-      local lbc_name lbc_desc lbc_ns sa_name sa_create
+      local lbc_name lbc_desc lbc_ns lbc_replica_count sa_name sa_create
       lbc_name="$(yq "${lbc_path}[${j}].name" "${yaml_file}")"
       lbc_desc="$(yq "${lbc_path}[${j}].description" "${yaml_file}")"
       lbc_ns="$(yq "${lbc_path}[${j}].namespace" "${yaml_file}")"
+      lbc_replica_count="$(yq "${lbc_path}[${j}].replica-count" "${yaml_file}")"
       sa_name="$(yq "${lbc_path}[${j}].service_account.name" "${yaml_file}")"
       sa_create="$(yq "${lbc_path}[${j}].service_account.create" "${yaml_file}")"
+      [[ -z "$lbc_replica_count" || "$lbc_replica_count" == "null" ]] && lbc_replica_count="1"
       [[ -z "$sa_create" || "$sa_create" == "null" ]] && sa_create="false"
 
       [[ "${first}" == "true" ]] || hcl+=","
-      hcl+=$'\n'"    { name = \"${lbc_name}\", description = \"${lbc_desc}\", namespace = \"${lbc_ns}\", service_account = { name = \"${sa_name}\", create = ${sa_create} } }"
+      hcl+=$'\n'"    { name = \"${lbc_name}\", description = \"${lbc_desc}\", namespace = \"${lbc_ns}\", replica_count = ${lbc_replica_count}, service_account = { name = \"${sa_name}\", create = ${sa_create} } }"
       first=false
     done
   done

@@ -135,6 +135,7 @@ component:
           - name: "kr-carevo-dev-lbc"
             description: "Load Balancer Controller for EKS cluster"
             namespace: "kube-system"
+            replica-count: 1
             service_account:
               name: "kr-carevo-dev-lbc-sa"
               create: false
