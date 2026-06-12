@@ -144,37 +144,4 @@ variable "lbc" {
   default = []
 }
 
-# ── Gateway Manifests ────────────────────────────────────────────────────────
-# Gateway Class and Gateway resource definitions for ALB routing.
-# Sourced from k8surface.yml component.cluster[].lbc[].gateway_manifests.
-variable "gateway_manifests" {
-  description = <<-EOT
-    Gateway Class and Gateway resource configuration from k8surface.yml
-    component.cluster[].lbc[].gateway_manifests.
-    gc_name  - GatewayClass resource name (ALB controller integration point).
-    gateway  - List of Gateway resource definitions with listeners and namespace selectors.
-  EOT
-  type = object({
-    gc_name = string
-    gateway = list(object({
-      name          = string
-      gateway_class = string
-      description   = string
-      namespace     = string
-      annotations   = map(string)
-      ports = list(object({
-        name     = string
-        port     = number
-        protocol = string
-      }))
-      matches = list(object({
-        name  = string
-        value = bool
-      }))
-    }))
-  })
-  default = {
-    gc_name = ""
-    gateway = []
-  }
-}
+

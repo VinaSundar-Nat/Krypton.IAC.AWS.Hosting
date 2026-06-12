@@ -6,11 +6,11 @@
 
 Secure workload identity without hardcoded credentials is foundational to AWS security best practices (application security pillar). EKS Pod Identity simplifies this by eliminating the administrative overhead that IRSA (IAM Roles for Service Accounts) created, particularly during cluster autoscaling.
 
-This feature enables the AWS Load Balancer Controller add-on to authenticate with AWS services securely and dynamically, and provisions Application Load Balancers (ALBs) associated with Kubernetes Gateways to route external traffic into the cluster across multiple subnets and security boundaries.
+This feature enables the AWS Load Balancer Controller add-on to authenticate with AWS services securely and dynamically, and provisions Application Load Balancers (ALBs) to route external traffic into the cluster across multiple subnets and security boundaries.
 
 ## What
 
-Provision EKS Pod Identity and secure cluster add-on authentication for the AWS Load Balancer Controller. Create an ALB and associate it with a Kubernetes Gateway for traffic routing across public and private subnets.
+Provision EKS Pod Identity and secure cluster add-on authentication for the AWS Load Balancer Controller. Create an ALB for traffic routing across public and private subnets.
 
 ### Infrastructure Components
 
@@ -20,8 +20,6 @@ Provision EKS Pod Identity and secure cluster add-on authentication for the AWS 
 4. **IAM Policy for LBC** – Load Balancer Controller permissions attached to the role
 5. **Service Account** – `kr-carevo-dev-lbc-sa` in `kube-system` namespace for workload identity
 6. **Helm Release** – AWS Load Balancer Controller v2.x deployment
-7. **Gateway Resources** – Kubernetes Gateway manifests for public and private ALB routing
-8. **Gateway Class** – ALB controller integration point for Gateway resource
 
 ### Network Placement
 
@@ -37,11 +35,10 @@ Provision EKS Pod Identity and secure cluster add-on authentication for the AWS 
 - Trust policy principal format must accept both `Service` type (for Pod Identity) and `AWS` type (for future admin roles), with optional `$${account_id}` placeholder substitution for AWS principals only
 - IAM policies must be sourced from templates (`core/module/iam/template/*.json`) and not hardcoded in Terraform
 - Pod Identity configuration must be driven from `environment/dev/platform/identity.yml` under `pod_identity` section
-- Gateway manifests and Load Balancer Controller configuration must be sourced from `environment/dev/hosting/k8surface.yml` under `lbc` section
+- Load Balancer Controller configuration must be sourced from `environment/dev/hosting/k8surface.yml` under `lbc` section
 - Role association and policy attachment logic must match role identifiers across identity and hosting configurations
 - All add-ons, roles, and service accounts must be created conditionally based on cluster opt-in status
 - Helm provider must support both local (AWS Roles Anywhere) and GHA (OIDC) authentication paths
-- Kubernetes manifest resources must depend on Load Balancer Controller readiness before creation
 
 ### Must Not
 
@@ -51,7 +48,7 @@ Provision EKS Pod Identity and secure cluster add-on authentication for the AWS 
 - Must not bypass Pod Identity association; workloads must authenticate through assumed roles only
 - Must not create ALBs or Gateway resources without proper security group and NACL rules in place
 - Must not alter unrelated IAM, network, or cluster module boundaries or contracts
-- Must not create HTTP Routes or Ingress resources in this iteration (Gateway Class and Gateways only)
+- Must not create HTTP Routes or Ingress resources in this iteration
 
 ### Out of Scope
 
@@ -318,124 +315,6 @@ resource "helm_release" "kr_load_balancer_controller" {
 
 ---
 
-### TASK7: Create Gateway Class and Gateway Manifests
-
-**Objective:** Provision Kubernetes Gateway resources for ALB routing and HTTP traffic ingestion.
-
-**Details:**
-
-1. In `core/module/hosting/k8/manifests/main.tf`, create the Gateway Class:
-
-```hcl
-resource "kubernetes_manifest" "kr_alb_gateway_class" {
-  manifest = {
-    apiVersion = "gateway.networking.k8s.io/v1"
-    kind       = "GatewayClass"
-    metadata = {
-      name = var.gateway_manifests.gc_name
-    }
-    spec = {
-      controllerName = "gateway.k8s.aws/alb"
-    }
-  }
-}
-```
-
-2. Create a generic Gateway resource that renders from configuration:
-
-```hcl
-resource "kubernetes_manifest" "kr_gateway" {
-  for_each = { for gw in var.gateway_manifests.gateway : gw.name => gw }
-
-  manifest = {
-    apiVersion = "gateway.networking.k8s.io/v1"
-    kind       = "Gateway"
-    metadata = {
-      name        = each.value.name
-      namespace   = each.value.namespace
-      annotations = each.value.annotations
-    }
-    spec = {
-      gatewayClassName = each.value.gateway_class
-      listeners = [
-        for port in each.value.ports : {
-          name     = port.name
-          protocol = port.protocol
-          port     = port.port
-          allowedRoutes = {
-            namespaces = {
-              from     = "Selector"
-              selector = { matchLabels = { for m in each.value.matches : m.name => tostring(m.value) } }
-            }
-          }
-        }
-      ]
-    }
-  }
-
-  depends_on = [kubernetes_manifest.kr_alb_gateway_class, helm_release.kr_load_balancer_controller]
-}
-```
-
-3. Update `environment/dev/hosting/k8surface.yml` to include Gateway definitions under `lbc.gateway_manifests` (see environment config example below).
-
-4. Update `core/variables/k8hosting.tf` to define `gateway_manifests` input variable.
-
-5. Update `scripts/configuration/k8hosting-vars.sh` to extract Gateway configuration from YAML.
-
-#### Environment Configuration Example
-
-Add to `environment/dev/hosting/k8surface.yml`:
-
-```yaml
-lbc:
-  - name: "kr-carevo-dev-lbc"
-    description: "Load Balancer Controller for EKS cluster"
-    namespace: "kube-system"
-    service_account:
-      name: "kr-carevo-dev-lbc-sa"
-      create: false
-    gateway_manifests:
-      gc_name: "kr-carevo-dev-alb"
-      gateway:
-        - name: "kr-carevo-dev-public-alb-gateway"
-          gateway_class: "kr-carevo-dev-alb"
-          description: "Public ALB Gateway for internet-facing traffic"
-          namespace: "carevo-infra-ns"
-          annotations:
-            alb.ingress.kubernetes.io/scheme: "internet-facing"
-            alb.ingress.kubernetes.io/target-type: "ip"
-          ports:
-            - name: "http"
-              port: 80
-              protocol: "HTTP"
-            - name: "https"
-              port: 443
-              protocol: "HTTPS"
-          matches:
-            - name: "krce-pub-alb-associated"
-              value: true
-        - name: "kr-carevo-dev-private-alb-gateway"
-          gateway_class: "kr-carevo-dev-alb"
-          description: "Private ALB Gateway for internal traffic"
-          namespace: "carevo-infra-ns"
-          annotations:
-            alb.ingress.kubernetes.io/scheme: "internal"
-            alb.ingress.kubernetes.io/target-type: "ip"
-          ports:
-            - name: "http"
-              port: 80
-              protocol: "HTTP"
-            - name: "https"
-              port: 443
-              protocol: "HTTPS"
-          matches:
-            - name: "krce-prv-alb-associated"
-              value: true
-```
-
----
-
 ## Post-Implementation Review Checklist
 
 This checklist reflects the implementation completed on 2026-06-11 and should be verified during testing.
@@ -487,16 +366,6 @@ This checklist reflects the implementation completed on 2026-06-11 and should be
   - [x] `scripts/configuration/k8hosting-vars.sh` — `_render_lbc()` function added
   - [x] `environment/dev/hosting/k8surface.yml` — `lbc` section already present with full configuration
 
-- [x] **TASK7**: Gateway Class and Gateway manifests created:
-  - [x] `core/module/hosting/k8/manifests/main.tf` — `kubernetes_manifest.kr_alb_gateway_class` with `gateway.k8s.aws/alb` controllerName
-  - [x] `core/module/hosting/k8/manifests/main.tf` — `kubernetes_manifest.kr_gateway` for_each over gateway array; dynamic listeners and namespace selector from matches
-  - [x] `core/module/hosting/k8/manifests/variable.tf` — `eks_enabled` and `gateway_manifests` object variable
-  - [x] `core/module/hosting/k8/manifests/output.tf` — `gateway_class_name` and `gateway_names` outputs
-  - [x] `core/variables/k8hosting.tf` — `gateway_manifests` object variable with full type definition
-  - [x] `core/variables/k8hosting.auto.tfvars.tpl` — `REPLACE_GATEWAY_MANIFESTS` token added
-  - [x] `scripts/configuration/k8hosting-vars.sh` — `_render_gateway_manifests()` function added
-  - [x] `core/main.tf` — `deploy-kr-eks-manifests` module wired with `depends_on = [deploy-kr-eks-alb, deploy-kr-eks-namespaces]`
-
 ### YAML Source & Variable Generation
 
 - [x] `environment/dev/platform/identity.yml`:
@@ -507,13 +376,11 @@ This checklist reflects the implementation completed on 2026-06-11 and should be
 
 - [x] `environment/dev/hosting/k8surface.yml`:
   - [x] Contains `lbc` array under `cluster[0]` with name, description, namespace, service_account
-  - [x] `gateway_manifests.gc_name: "kr-carevo-dev-alb"` defined
-  - [x] Public and private gateway entries with correct scheme annotations, ports (80/443), and matches
   - [x] `service_account.create: false` — service account managed by namespace module
 
 - [x] `scripts/configuration/replace-vars.sh kr-carevo dev` runs successfully:
   - [x] `identity.auto.tfvars` generated with `pod_identity` block
-  - [x] `k8hosting.auto.tfvars` generated with `lbc` and `gateway_manifests` blocks
+  - [x] `k8hosting.auto.tfvars` generated with `lbc` block
   - [x] No REPLACE_ tokens remain after substitution
 
 ### Terraform Validation
@@ -530,9 +397,6 @@ This checklist reflects the implementation completed on 2026-06-11 and should be
   - [ ] `aws_eks_addon` `eks-pod-identity-agent` provisioned
   - [ ] Helm provider initializes without errors
   - [ ] `helm_release` `kr-carevo-dev-lbc` created pointing to `aws-load-balancer-controller`
-  - [ ] `kubernetes_manifest` GatewayClass `kr-carevo-dev-alb` created
-  - [ ] `kubernetes_manifest` Gateway `kr-carevo-dev-public-alb-gateway` created
-  - [ ] `kubernetes_manifest` Gateway `kr-carevo-dev-private-alb-gateway` created
   - [ ] No unrelated resources planned for modification
   - [ ] No missing variable warnings
 
@@ -544,12 +408,11 @@ This checklist reflects the implementation completed on 2026-06-11 and should be
   - [ ] `deploy-kr-iam-cluster-identity` → `deploy-kr-iam-cluster-alb` (role ARN available for association)
   - [ ] `deploy-kr-eks-namespaces` → `deploy-kr-iam-cluster-alb` (service account exists before association)
   - [ ] `deploy-kr-eks-addons` → `deploy-kr-eks-alb` (pod identity agent running before LBC helm release)
-  - [ ] `deploy-kr-eks-alb` → `deploy-kr-eks-manifests` (LBC running before GatewayClass/Gateway created)
 - [ ] Existing module contracts unchanged: cluster, nodegroup, IAM, network module inputs/outputs unmodified
 
 ### Opt-In & Filtering
 
-- [ ] `pod_identity.required = false` → no `aws_eks_addon`, no `aws_eks_pod_identity_association`, no LBC, no Gateway resources created
+- [ ] `pod_identity.required = false` → no `aws_eks_addon`, no `aws_eks_pod_identity_association`, and no LBC resources created
 - [ ] `eks_enabled = false` → all EKS, LBC, manifest, and addon resources skipped
 - [ ] `lbc_roles_map` in identity module correctly skips `adm-*` roles, processes `lbc-*` roles only
 
@@ -570,8 +433,6 @@ This checklist reflects the implementation completed on 2026-06-11 and should be
 
 - [ ] Inspect generated `core/variables/k8hosting.auto.tfvars`:
   - [ ] `lbc` block present with correct name, namespace, service_account
-  - [ ] `gateway_manifests` block present with `gc_name`, public and private gateway definitions
-  - [ ] Port, protocol, and annotation values match k8surface.yml source
 
 - [ ] Optional: Apply infrastructure (if test environment available):
   - [ ] Pod Identity role and policy created in IAM
@@ -579,5 +440,3 @@ This checklist reflects the implementation completed on 2026-06-11 and should be
   - [ ] Pod Identity association active and functional
   - [ ] Add-on `eks-pod-identity-agent` running in `kube-system`
   - [ ] Load Balancer Controller pods running with Pod Identity authentication
-  - [ ] GatewayClass `kr-carevo-dev-alb` created and accepted by ALB controller
-  - [ ] Gateway resources provisioned and ALBs created in AWS

@@ -525,18 +525,3 @@ module "deploy-kr-eks-alb" {
   ]
 }
 
-# =============================================================================
-# EKS Manifests Module — creates Gateway Class and Gateway resources
-# =============================================================================
-module "deploy-kr-eks-manifests" {
-  source = "./module/hosting/k8/manifests"
-
-  eks_enabled       = var.eks_enabled
-  gateway_manifests = var.gateway_manifests
-
-  depends_on = [
-    module.deploy-kr-eks-alb,
-    module.deploy-kr-eks-namespaces,
-  ]
-}
-

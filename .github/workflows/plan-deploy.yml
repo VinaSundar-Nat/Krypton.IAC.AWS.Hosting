@@ -106,24 +106,6 @@ jobs:
         run: |
           PLAN_FILE="${RUNNER_TEMP}/kr_ops_${{ inputs.environment }}_$(date -u +%Y%m%d_%H%M%S).tfplan"
           echo "PLAN_FILE=${PLAN_FILE}" >> "${GITHUB_ENV}"
-          # kubernetes_manifest (GatewayClass/Gateway) requires a live cluster API at
-          # plan time. HashiCorp Terraform has no -exclude flag, so when the cluster
-          # doesn't exist yet we pass -var to override gateway_manifests to empty,
-          # forcing count=0 on all kubernetes_manifest resources (no API call needed).
-          # The deploy job applies the manifests in Phase 2 after the cluster is live.
-          MANIFESTS_OVERRIDE=()
-          K8S_CLUSTER_NAME="$(grep 'kubernetes_cluster_name' variables/k8hosting.auto.tfvars \
-            | sed 's/.*= *"\(.*\)"/\1/')" || true
-          if grep -q 'eks_enabled *= *true' variables/k8hosting.auto.tfvars 2>/dev/null \
-             && [[ -n "${K8S_CLUSTER_NAME}" ]]; then
-            if ! aws eks describe-cluster \
-                 --name "${K8S_CLUSTER_NAME}" \
-                 --region "${{ vars.TF_STATE_REGION || 'us-east-1' }}" \
-                 --output text &>/dev/null 2>&1; then
-              MANIFESTS_OVERRIDE=( -var 'gateway_manifests={gc_name="",gateway=[]}')
-              echo "EKS cluster not yet live — manifests suppressed in Phase 1 plan."
-            fi
-          fi
           terraform plan \
             -var='auth_mode=gha' \
             -var="gha_role_arn=${{ secrets.GHA_ROLE_ARN }}" \
@@ -131,7 +113,6 @@ jobs:
             -var-file=variables/rules.auto.tfvars \
             -var-file=variables/identity.auto.tfvars \
             -var-file=variables/k8hosting.auto.tfvars \
-            "${MANIFESTS_OVERRIDE[@]}" \
             -out="${PLAN_FILE}" \
             -lock=false \
             -detailed-exitcode 2>&1 | tee /tmp/plan.log
@@ -240,50 +221,11 @@ jobs:
             echo "ERROR: No plan file found in downloaded artifact." >&2
             exit 1
           fi
-          # ── Phase 1 apply ───────────────────────────────────────────────────────
           terraform apply -auto-approve "${PLAN_FILE}" 2>&1 | tee /tmp/apply.log
           # Mask AWS resource IDs from logs (read-only security)
           grep -oE '(i-[a-f0-9]{8,}|sg-[a-f0-9]{8,}|arn:aws:[a-z0-9-]+:[a-z0-9-]*:[0-9]{12}:[a-z0-9-/]+|vpc-[a-f0-9]{8,}|subnet-[a-f0-9]{8,}|rtb-[a-f0-9]{8,}|nat-[a-f0-9]{8,}|igw-[a-f0-9]{8,})' /tmp/apply.log | sort -u | while read id; do
             echo "::add-mask::$id"
           done
-          # ── Phase 2: EKS Manifests ──────────────────────────────────────────
-          # kubernetes_manifest resources need a live cluster API. Phase 1 created
-          # the cluster; now plan and apply the manifests module separately.
-          if grep -q 'eks_enabled *= *true' variables/k8hosting.auto.tfvars 2>/dev/null; then
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo " Phase 2: EKS Manifests (GatewayClass / Gateway)"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            P2_PLAN="${RUNNER_TEMP}/manifests_p2.tfplan"
-            set +e
-            terraform plan \
-              -var='auth_mode=gha' \
-              -var="gha_role_arn=${TF_VAR_gha_role_arn}" \
-              -var-file=variables/network.auto.tfvars \
-              -var-file=variables/rules.auto.tfvars \
-              -var-file=variables/identity.auto.tfvars \
-              -var-file=variables/k8hosting.auto.tfvars \
-              -target=module.deploy-kr-eks-manifests \
-              -out="${P2_PLAN}" \
-              -lock=false \
-              -detailed-exitcode 2>&1 | tee /tmp/plan_p2.log
-            P2_EXIT=$?
-            set -e
-            grep -oE '(i-[a-f0-9]{8,}|sg-[a-f0-9]{8,}|arn:aws:[a-z0-9-]+:[a-z0-9-]*:[0-9]{12}:[a-z0-9-/]+|vpc-[a-f0-9]{8,}|subnet-[a-f0-9]{8,}|rtb-[a-f0-9]{8,}|nat-[a-f0-9]{8,}|igw-[a-f0-9]{8,})' /tmp/plan_p2.log | sort -u | while read id; do
-              echo "::add-mask::$id"
-            done
-            if [[ ${P2_EXIT} -eq 1 ]]; then
-              echo "ERROR: Phase 2 plan (EKS manifests) failed." >&2
-              exit 1
-            fi
-            if [[ ${P2_EXIT} -eq 2 ]]; then
-              terraform apply -auto-approve "${P2_PLAN}" 2>&1 | tee /tmp/apply_p2.log
-              grep -oE '(i-[a-f0-9]{8,}|sg-[a-f0-9]{8,}|arn:aws:[a-z0-9-]+:[a-z0-9-]*:[0-9]{12}:[a-z0-9-/]+|vpc-[a-f0-9]{8,}|subnet-[a-f0-9]{8,}|rtb-[a-f0-9]{8,}|nat-[a-f0-9]{8,}|igw-[a-f0-9]{8,})' /tmp/apply_p2.log | sort -u | while read id; do
-                echo "::add-mask::$id"
-              done
-            else
-              echo "Phase 2: no manifest changes — already up to date."
-            fi
-          fi
         env:
           TF_VAR_auth_mode: "gha"
           TF_VAR_gha_role_arn: ${{ secrets.GHA_ROLE_ARN }}

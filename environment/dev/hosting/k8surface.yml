@@ -138,45 +138,6 @@ component:
             service_account:
               name: "kr-carevo-dev-lbc-sa"
               create: false
-            gateway_manifests:
-                gc_name: "kr-carevo-dev-alb"
-                gateway:
-                  - name: "kr-carevo-dev-public-alb-gateway"
-                    gateway_class: "kr-carevo-dev-alb"
-                    description: "Gateway for ALB Ingress Controller"
-                    namespace: "carevo-infra-ns"
-                    annotations: 
-                      alb.ingress.kubernetes.io/scheme: "internet-facing"
-                      alb.ingress.kubernetes.io/target-type: "ip"
-                    ports:
-                      - name: "http"
-                        port: 80
-                        protocol: "HTTP"
-                      - name: "https"
-                        port: 443
-                        protocol: "HTTPS"                  
-                    matches: [{
-                          name: "krce-pub-alb-associated",
-                          value: true
-                        }]
-                  - name: "kr-carevo-dev-private-alb-gateway"
-                    gateway_class: "kr-carevo-dev-alb"
-                    description: "Gateway for ALB Ingress Controller"
-                    namespace: "carevo-infra-ns"
-                    annotations: 
-                      alb.ingress.kubernetes.io/scheme: "internal"
-                      alb.ingress.kubernetes.io/target-type: "ip"
-                    ports:
-                      - name: "http"
-                        port: 80
-                        protocol: "HTTP"
-                      - name: "https"
-                        port: 443
-                        protocol: "HTTPS"                  
-                    matches: [{
-                          name: "krce-prv-alb-associated",
-                          value: true
-                        }]
-
+            
 
               

@@ -24,6 +24,3 @@ namespace_map = REPLACE_NAMESPACE_MAP
 
 # Load Balancer Controller Helm config — from k8surface.yml component.cluster[].lbc[]
 lbc = REPLACE_LBC
-
-# Gateway Class and Gateway manifests — from k8surface.yml component.cluster[].lbc[].gateway_manifests
-gateway_manifests = REPLACE_GATEWAY_MANIFESTS
